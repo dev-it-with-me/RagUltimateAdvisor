@@ -1,0 +1,19 @@
+[project]
+name = "ultimateadvisor"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]>=0.116.1",
+    "llama-index>=0.13.6",
+    "llama-index-embeddings-ollama>=0.8.2",
+    "llama-index-llms-ollama>=0.7.1",
+    "llama-index-vector-stores-postgres>=0.6.5",
+    "ollama>=0.5.3",
+    "pgvector>=0.4.1",
+    "psycopg>=3.2.9",
+    "pydantic>=2.11.7",
+    "pydantic-settings>=2.10.1",
+    "sqlalchemy>=2.0.43",
+]

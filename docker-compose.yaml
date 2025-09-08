@@ -1,0 +1,14 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: postgres-pgvector
+    ports:
+      - "{APP_PG_PORT}:5432"
+    environment:
+      POSTGRES_USER: ${APP_PG_USER}
+      POSTGRES_PASSWORD: ${APP_PG_PASSWORD}
+      POSTGRES_DB: ${APP_PG_DATABASE}
+    volumes:
+      - postgres_data:{APP_VOLUME_FOLDER}
+volumes:
+  postgres_data:
