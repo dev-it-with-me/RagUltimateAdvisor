@@ -19,7 +19,7 @@ class Settings(BaseSettings):
         default="documents", description="Name of the table to store document vectors"
     )
     EMBED_DIM: int = Field(
-        default=1024, description="Dimension of the embedding vectors"
+        default=768, description="Dimension of the embedding vectors"
     )
 
     # Ollama Configuration
@@ -42,7 +42,7 @@ class Settings(BaseSettings):
         env_prefix="APP_",
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="forbid",
+        extra="ignore",
     )
 
 
