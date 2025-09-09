@@ -6,10 +6,13 @@ including vector storage, document indexing, and query operations.
 
 import logging
 from contextlib import suppress
-import uuid
-import json
-
-from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Settings
+from pathlib import Path
+from llama_index.core import (
+    VectorStoreIndex,
+    SimpleDirectoryReader,
+    Settings,
+    StorageContext,
+)
 from llama_index.core.schema import Document
 from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.llms.ollama import Ollama
@@ -30,6 +33,7 @@ class RAGRepository:
         """Initialize the RAG repository with database connection and models."""
         self.engine: None | Engine = None
         self.vector_store: None | PGVectorStore = None
+        self.storage_context: None | StorageContext = None
         self.index: None | VectorStoreIndex = None
         # Track the actual embedding dimension detected from the model
         self._actual_embed_dim: int | None = None
@@ -54,8 +58,8 @@ class RAGRepository:
                 settings.EMBEDDING_MODEL,
             )
 
-            # Detect actual embedding dimension once to avoid mismatches with configured EMBED_DIM
-            with suppress(Exception):  # Non fatal; we'll log if it fails below
+            # Detect actual embedding dimension - this is critical for vector store setup
+            try:
                 test_vector = Settings.embed_model.get_text_embedding("__dim_probe__")
                 self._actual_embed_dim = len(test_vector)
                 if self._actual_embed_dim != settings.EMBED_DIM:
@@ -68,12 +72,14 @@ class RAGRepository:
                     logger.info(
                         "Embedding dimension confirmed: %s", self._actual_embed_dim
                     )
-
-            if self._actual_embed_dim is None:
+            except Exception as e:
+                logger.error("Failed to probe embedding dimension: %s", e)
                 logger.warning(
                     "Could not determine embedding dimension during setup; proceeding with configured EMBED_DIM=%s",
                     settings.EMBED_DIM,
                 )
+                self._actual_embed_dim = None
+
         except Exception as e:
             logger.error("Failed to setup models: %s", e)
             raise
@@ -103,6 +109,7 @@ class RAGRepository:
                     settings.EMBED_DIM,
                 )
 
+            # Initialize vector store but let it handle table creation
             self.vector_store = PGVectorStore.from_params(
                 database=settings.PG_DATABASE,
                 host=settings.PG_HOST,
@@ -117,75 +124,39 @@ class RAGRepository:
                 settings.VECTOR_TABLE_NAME,
                 embed_dim,
             )
-
-            # Proactively create underlying table if private helper exists (future-proof)
-            with suppress(Exception):
-                create_fn = getattr(
-                    self.vector_store, "_create_tables", None
-                ) or getattr(self.vector_store, "_create_table", None)
-                if callable(create_fn):
-                    create_fn()
-                    logger.info(
-                        "Proactively ensured vector table '%s' exists",
-                        settings.VECTOR_TABLE_NAME,
-                    )
-
-            # List current tables for diagnostics
-            self._log_existing_tables()
-            # After initialization, if mismatch persists with an existing table, offer to recreate automatically.
-            self._maybe_recreate_on_dim_mismatch()
         except Exception as e:
             logger.error("Failed to setup database: %s", e)
             raise
 
-    def index_documents(self, documents: list[Document]) -> bool:
-        """Index documents into the vector store.
-
-        Args:
-            documents: List of documents to index
-
-        Returns:
-            bool: True if indexing was successful
-        """
+    def index_documents(self, documents: list) -> bool:
+        """Index documents into the vector store."""
         try:
-            if not self.vector_store:
-                raise ValueError("Vector store not initialized")
+            if not documents:
+                logger.warning("No documents to index")
+                return False
+            logger.info(f"Indexing {len(documents)} documents")
 
-            self.index = VectorStoreIndex.from_documents(
-                documents, vector_store=self.vector_store
+            logger.info("Creating index from documents...")
+            self.storage_context = StorageContext.from_defaults(
+                vector_store=self.vector_store
             )
-            logger.info("Indexed %s documents successfully", len(documents))
-            # Post-index: verify table exists & log row count immediately
-            with suppress(Exception):
-                # Retry a few times in case table creation/commit is slightly delayed
-                import time
-
-                for attempt in range(5):
-                    count = self.get_document_count()
-                    if count > 0:
-                        logger.info(
-                            "Post-index document count observed (attempt %s): %s",
-                            attempt + 1,
-                            count,
-                        )
-                        break
-                    if attempt < 4:
-                        time.sleep(0.5 * (attempt + 1))
-                else:
-                    logger.warning(
-                        "Post-index document count still 0 after retries; check table name, permissions, or embedding dimension."
-                    )
-                    # Fallback: attempt manual persistence if table truly absent
-                    if self.engine:
-                        self._fallback_persist(documents)
-                self._log_existing_tables()
+            self.index = VectorStoreIndex.from_documents(
+                documents,
+                storage_context=self.storage_context,
+                embed_model=Settings.embed_model,
+                show_progress=True,
+            )
+            logger.info("Documents indexed successfully")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to index documents: {e}")
+            logger.error(f"Error indexing documents: {e}")
+            import traceback
+
+            traceback.print_exc()
             return False
 
-    def index_documents_from_directory(self, directory_path: str) -> bool:
+    def index_documents_from_directory(self, directory_path: Path) -> bool:
         """Index all documents from a directory.
 
         Args:
@@ -215,29 +186,45 @@ class RAGRepository:
             Optional[str]: The response text or None if query failed
         """
         try:
-            # Check health requiring an index for queries
-            health = self.health_check(require_index=True)
-            if not all(health.values()):
-                logger.error("System not ready for queries")
+            # First check basic health (database, vector_store, models)
+            health = self.health_check(require_index=False)
+            basic_health = {k: v for k, v in health.items() if k != "index"}
+            if not all(basic_health.values()):
+                logger.error("System not ready for queries - basic components failed")
+                logger.error(f"Health status: {health}")
                 return None
 
+            # Check if we have documents in the vector store
+            doc_count = self.get_document_count()
+            if doc_count == 0:
+                logger.error("No documents in vector store - cannot perform queries")
+                return None
+
+            logger.info(f"Vector store contains {doc_count} documents")
+
+            # Ensure index is initialized from vector store
             if not self.index:
-                logger.warning(
-                    "Index not initialized, attempting to load from vector store"
-                )
+                logger.info("Index not initialized, creating from vector store...")
                 if self.vector_store:
                     self.index = VectorStoreIndex.from_vector_store(self.vector_store)
+                    logger.info("✓ Index successfully created from vector store")
                 else:
-                    raise ValueError("Vector store not initialized")
+                    logger.error("Vector store not initialized")
+                    return None
 
+            # Perform the query
+            logger.info(f"Executing query: '{query_text[:50]}...'")
             query_engine = self.index.as_query_engine(similarity_top_k=similarity_top_k)
             response = query_engine.query(query_text)
 
-            logger.info(f"Query executed successfully: '{query_text[:50]}...'")
+            logger.info("Query executed successfully")
             return str(response)
 
         except Exception as e:
             logger.error(f"Failed to execute query: {e}")
+            import traceback
+
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return None
 
     def get_document_count(self) -> int:
@@ -251,7 +238,6 @@ class RAGRepository:
             return 0
         try:
             with self.engine.connect() as conn:
-                # Determine if table exists
                 exists_result = conn.execute(
                     text(
                         "SELECT 1 FROM information_schema.tables WHERE table_name = :tbl"
@@ -264,26 +250,6 @@ class RAGRepository:
                         settings.VECTOR_TABLE_NAME,
                     )
                     return 0
-                # If we know actual embed dim, ensure column type matches expected length
-                if self._actual_embed_dim is not None:
-                    with suppress(Exception):
-                        dim_row = conn.execute(
-                            text(
-                                "SELECT atttypmod FROM pg_attribute a JOIN pg_class c ON a.attrelid=c.oid JOIN pg_namespace n ON c.relnamespace=n.oid "
-                                "WHERE c.relname=:tbl AND a.attname='embedding' AND a.attnum>0 AND NOT a.attisdropped"
-                            ),
-                            {"tbl": settings.VECTOR_TABLE_NAME},
-                        ).fetchone()
-                        # pgvector stores dimension in atttypmod -4 (vector(dim)) => atttypmod = dim + 4
-                        if dim_row and dim_row[0] is not None:
-                            stored_dim = dim_row[0] - 4
-                            if stored_dim != self._actual_embed_dim:
-                                logger.warning(
-                                    "Existing table '%s' embedding dim %s != model dim %s; recreate advised.",
-                                    settings.VECTOR_TABLE_NAME,
-                                    stored_dim,
-                                    self._actual_embed_dim,
-                                )
                 result = conn.execute(
                     text(f"SELECT COUNT(*) FROM {settings.VECTOR_TABLE_NAME}")
                 )
@@ -298,29 +264,48 @@ class RAGRepository:
             )
             return 0
 
-    def _log_existing_tables(self) -> None:
-        """Log current user tables (diagnostic)."""
+    def _ensure_vector_table_exists(self, embed_dim: int) -> None:
+        """Ensure the vector table exists with correct schema."""
         if not self.engine:
+            logger.warning("Cannot ensure vector table: engine not initialized")
             return
-        with suppress(Exception):
+
+        try:
             with self.engine.connect() as conn:
-                rows = conn.execute(
+                # Check if table exists
+                exists_result = conn.execute(
                     text(
-                        "SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name"
+                        "SELECT 1 FROM information_schema.tables WHERE table_name = :tbl"
+                    ),
+                    {"tbl": settings.VECTOR_TABLE_NAME},
+                ).fetchone()
+
+                if not exists_result:
+                    # Create table manually if it doesn't exist
+                    logger.info(
+                        f"Creating vector table '{settings.VECTOR_TABLE_NAME}' with embed_dim={embed_dim}"
                     )
-                ).fetchall()
-                names = [r[0] for r in rows]
-                logger.info("Public schema tables: %s", names)
-                # If expected table missing but others exist, highlight
-                if (
-                    settings.VECTOR_TABLE_NAME not in names
-                    and len(names) > 0
-                    and self._actual_embed_dim is not None
-                ):
-                    logger.warning(
-                        "Expected vector table '%s' missing while other tables exist",  # noqa: E501
-                        settings.VECTOR_TABLE_NAME,
+                    conn.execute(
+                        text(
+                            f"CREATE TABLE {settings.VECTOR_TABLE_NAME} ("
+                            "id UUID PRIMARY KEY DEFAULT gen_random_uuid(), "
+                            "content TEXT NOT NULL, "
+                            f"embedding vector({embed_dim}) NOT NULL, "
+                            "metadata JSONB DEFAULT '{}'"
+                            ")"
+                        )
                     )
+                    conn.commit()
+                    logger.info(
+                        f"Vector table '{settings.VECTOR_TABLE_NAME}' created successfully"
+                    )
+                else:
+                    logger.info(
+                        f"Vector table '{settings.VECTOR_TABLE_NAME}' already exists"
+                    )
+
+        except Exception as e:
+            logger.error(f"Failed to ensure vector table exists: {e}")
 
     def clear_index(self) -> bool:
         """Clear all documents from the index.
@@ -369,65 +354,6 @@ class RAGRepository:
             logger.error("Failed to force recreate index: %s", e)
             return False
 
-    def _maybe_recreate_on_dim_mismatch(self) -> None:
-        """Detect dimension mismatch and auto-recreate table if empty or unusable."""
-        if self._actual_embed_dim is None or not self.engine:
-            return
-        try:
-            with self.engine.connect() as conn:
-                # Check if table exists
-                exists = conn.execute(
-                    text("SELECT 1 FROM information_schema.tables WHERE table_name=:t"),
-                    {"t": settings.VECTOR_TABLE_NAME},
-                ).fetchone()
-                if not exists:
-                    return  # nothing to do
-                # Fetch stored dim
-                dim_row = conn.execute(
-                    text(
-                        "SELECT atttypmod FROM pg_attribute a JOIN pg_class c ON a.attrelid=c.oid JOIN pg_namespace n ON c.relnamespace=n.oid "
-                        "WHERE c.relname=:tbl AND a.attname='embedding' AND a.attnum>0 AND NOT a.attisdropped"
-                    ),
-                    {"tbl": settings.VECTOR_TABLE_NAME},
-                ).fetchone()
-                if not dim_row or dim_row[0] is None:
-                    return
-                stored_dim = dim_row[0] - 4
-                if stored_dim != self._actual_embed_dim:
-                    # Check if table is empty; if so, auto drop & recreate
-                    row = conn.execute(
-                        text(f"SELECT COUNT(*) FROM {settings.VECTOR_TABLE_NAME}")
-                    ).fetchone()
-                    count = int(row[0]) if row and row[0] is not None else 0
-                    if count == 0:
-                        logger.warning(
-                            "Auto-recreating empty vector table '%s' due to dimension mismatch (stored=%s, model=%s)",
-                            settings.VECTOR_TABLE_NAME,
-                            stored_dim,
-                            self._actual_embed_dim,
-                        )
-                        conn.execute(
-                            text(f"DROP TABLE IF EXISTS {settings.VECTOR_TABLE_NAME}")
-                        )
-                        conn.commit()
-                        # Recreate via vector_store re-init
-                        self.vector_store = PGVectorStore.from_params(
-                            database=settings.PG_DATABASE,
-                            host=settings.PG_HOST,
-                            password=settings.PG_PASSWORD,
-                            port=str(settings.PG_PORT),
-                            user=settings.PG_USER,
-                            table_name=settings.VECTOR_TABLE_NAME,
-                            embed_dim=self._actual_embed_dim,
-                        )
-                        logger.info(
-                            "Recreated vector table '%s' with embed_dim=%s",
-                            settings.VECTOR_TABLE_NAME,
-                            self._actual_embed_dim,
-                        )
-        except Exception as e:
-            logger.error("Dimension mismatch recreation check failed: %s", e)
-
     def health_check(self, require_index: bool = False) -> dict:
         """Perform a health check on the repository.
 
@@ -470,74 +396,6 @@ class RAGRepository:
             logger.error(f"Health check failed: {e}")
 
         return health
-
-    # ---------------- Fallback Logic -----------------
-    def _fallback_persist(self, documents: list[Document]) -> None:
-        """Fallback path: create table manually and insert embeddings if vector store failed.
-
-        This should rarely run; only when PGVectorStore didn't create a table.
-        """
-        if not self.engine:
-            return
-        if self._actual_embed_dim is None:
-            logger.error(
-                "Cannot fallback persist: unknown embedding dimension (model probe failed)"
-            )
-            return
-        try:
-            with self.engine.begin() as conn:  # transaction
-                # Create table manually if absent
-                conn.execute(
-                    text(
-                        f"CREATE TABLE IF NOT EXISTS {settings.VECTOR_TABLE_NAME} ("
-                        "id UUID PRIMARY KEY, "
-                        "content TEXT NOT NULL, "
-                        f"embedding vector({self._actual_embed_dim}) NOT NULL, "
-                        "metadata JSONB)"
-                    )
-                )
-            # Insert rows (batch) with embeddings
-            rows_inserted = 0
-            with self.engine.begin() as conn:
-                for doc in documents:
-                    text_content = (
-                        getattr(doc, "text", None)
-                        or getattr(doc, "get_content", lambda: "")()
-                    )
-                    if not text_content:
-                        continue
-                    embedding = Settings.embed_model.get_text_embedding(
-                        text_content[:5000]
-                    )  # truncate to avoid huge tokens
-                    # Prepare metadata
-                    meta = {}
-                    for attr in ("metadata", "extra_info"):
-                        with suppress(Exception):
-                            data = getattr(doc, attr, None)
-                            if isinstance(data, dict):
-                                meta.update(data)
-                    conn.execute(
-                        text(
-                            f"INSERT INTO {settings.VECTOR_TABLE_NAME} (id, content, embedding, metadata) VALUES (:id, :content, :embedding, :metadata)"
-                        ),
-                        {
-                            "id": str(uuid.uuid4()),
-                            "content": text_content,
-                            "embedding": embedding,
-                            "metadata": json.dumps(meta),
-                        },
-                    )
-                    rows_inserted += 1
-            logger.warning(
-                "Fallback persistence inserted %s rows into manually created table '%s'",
-                rows_inserted,
-                settings.VECTOR_TABLE_NAME,
-            )
-            logger.warning(
-                "You should investigate why PGVectorStore did not create/manage the table; continuing with manual table."  # noqa: E501
-            )
-        except Exception as e:
-            logger.error("Fallback persistence failed: %s", e)
 
 
 # Global repository instance

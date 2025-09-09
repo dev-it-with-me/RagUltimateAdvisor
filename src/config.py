@@ -1,6 +1,11 @@
 """Configuration module for the Ultimate Advisor application."""
 
-from pydantic import Field
+import sys
+from pathlib import Path
+
+BASE_DIR = Path(__file__).parent.parent
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,7 +24,8 @@ class Settings(BaseSettings):
         default="documents", description="Name of the table to store document vectors"
     )
     EMBED_DIM: int = Field(
-        default=768, description="Dimension of the embedding vectors"
+        default=768,
+        description="Dimension of the embedding vectors (auto-detected from model)",
     )
 
     # Ollama Configuration
@@ -34,9 +40,7 @@ class Settings(BaseSettings):
     )
 
     # Application Configuration
-    DATA_FOLDER: str = Field(
-        default="./data", description="Path to the folder containing documents to index"
-    )
+    DATA_FOLDER: Path = BASE_DIR / "data"
 
     model_config = SettingsConfigDict(
         env_prefix="APP_",
@@ -44,6 +48,14 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @field_validator("DATA_FOLDER")
+    def validate_directories(cls, v):
+        """Ensure that DATA_FOLDER is a valid Path object."""
+        if not isinstance(v, Path):
+            v = Path(v)
+        v.mkdir(parents=True, exist_ok=True)
+        return v
 
 
 # Global settings instance
