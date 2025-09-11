@@ -9,6 +9,35 @@ services:
       POSTGRES_PASSWORD: ${APP_PG_PASSWORD}
       POSTGRES_DB: ${APP_PG_DATABASE}
     volumes:
-      - postgres_data:${VOLUME_FOLDER}
+      - postgres_data:/var/lib/postgresql/data
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-server
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - APP_CHAT_MODEL=${APP_CHAT_MODEL}
+      - APP_EMBEDDING_MODEL=${APP_EMBEDDING_MODEL}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    entrypoint: []
+    command:
+      [
+        "sh",
+        "-c",
+        "ollama serve & sleep 5 && (ollama pull ${APP_CHAT_MODEL} || echo 'Failed to pull chat model') && (ollama pull ${APP_EMBEDDING_MODEL} || echo 'Failed to pull embedding model') && wait",
+      ]
+    restart: no
+
 volumes:
   postgres_data:
+  ollama_data:

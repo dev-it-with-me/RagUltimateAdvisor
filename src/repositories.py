@@ -242,7 +242,7 @@ class RAGRepository:
                     text(
                         "SELECT 1 FROM information_schema.tables WHERE table_name = :tbl"
                     ),
-                    {"tbl": settings.VECTOR_TABLE_NAME},
+                    {"tbl": f"data_{settings.VECTOR_TABLE_NAME}"},
                 ).fetchone()
                 if not exists_result:
                     logger.info(
@@ -251,7 +251,7 @@ class RAGRepository:
                     )
                     return 0
                 result = conn.execute(
-                    text(f"SELECT COUNT(*) FROM {settings.VECTOR_TABLE_NAME}")
+                    text(f"SELECT COUNT(*) FROM data_{settings.VECTOR_TABLE_NAME}")
                 )
                 row = result.fetchone()
                 count = int(row[0]) if row and row[0] is not None else 0
@@ -263,49 +263,6 @@ class RAGRepository:
                 e,
             )
             return 0
-
-    def _ensure_vector_table_exists(self, embed_dim: int) -> None:
-        """Ensure the vector table exists with correct schema."""
-        if not self.engine:
-            logger.warning("Cannot ensure vector table: engine not initialized")
-            return
-
-        try:
-            with self.engine.connect() as conn:
-                # Check if table exists
-                exists_result = conn.execute(
-                    text(
-                        "SELECT 1 FROM information_schema.tables WHERE table_name = :tbl"
-                    ),
-                    {"tbl": settings.VECTOR_TABLE_NAME},
-                ).fetchone()
-
-                if not exists_result:
-                    # Create table manually if it doesn't exist
-                    logger.info(
-                        f"Creating vector table '{settings.VECTOR_TABLE_NAME}' with embed_dim={embed_dim}"
-                    )
-                    conn.execute(
-                        text(
-                            f"CREATE TABLE {settings.VECTOR_TABLE_NAME} ("
-                            "id UUID PRIMARY KEY DEFAULT gen_random_uuid(), "
-                            "content TEXT NOT NULL, "
-                            f"embedding vector({embed_dim}) NOT NULL, "
-                            "metadata JSONB DEFAULT '{}'"
-                            ")"
-                        )
-                    )
-                    conn.commit()
-                    logger.info(
-                        f"Vector table '{settings.VECTOR_TABLE_NAME}' created successfully"
-                    )
-                else:
-                    logger.info(
-                        f"Vector table '{settings.VECTOR_TABLE_NAME}' already exists"
-                    )
-
-        except Exception as e:
-            logger.error(f"Failed to ensure vector table exists: {e}")
 
     def clear_index(self) -> bool:
         """Clear all documents from the index.
@@ -319,7 +276,9 @@ class RAGRepository:
 
             # Drop and recreate the table
             with self.engine.connect() as conn:
-                conn.execute(text(f"DROP TABLE IF EXISTS {settings.VECTOR_TABLE_NAME}"))
+                conn.execute(
+                    text(f"DROP TABLE IF EXISTS data_{settings.VECTOR_TABLE_NAME}")
+                )
                 conn.commit()
 
             # Reinitialize vector store
@@ -340,7 +299,9 @@ class RAGRepository:
             return False
         try:
             with self.engine.connect() as conn:
-                conn.execute(text(f"DROP TABLE IF EXISTS {settings.VECTOR_TABLE_NAME}"))
+                conn.execute(
+                    text(f"DROP TABLE IF EXISTS data_{settings.VECTOR_TABLE_NAME}")
+                )
                 conn.commit()
             logger.info(
                 "Dropped existing vector table '%s'", settings.VECTOR_TABLE_NAME
