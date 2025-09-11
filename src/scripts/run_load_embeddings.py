@@ -11,13 +11,13 @@ from typing import List
 
 from llama_index.core.schema import Document
 
-from ..dependencies import get_rag_service
-from ..services import RAGService
+from src.dependencies import get_rag_service
+from src.rag import RAGService
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ..config import settings
+from src.config import settings
 
 # Configure logging
 logging.basicConfig(
@@ -73,7 +73,7 @@ class DocumentLoader:
         logger.info(f"Found {len(document_files)} document files in {directory_path}")
         return document_files
 
-    def load_specific_document(self, file_path: str) -> List[Document]:
+    def load_specific_document(self, file_path: Path) -> List[Document]:
         """Load a specific document file.
 
         Args:
@@ -85,14 +85,13 @@ class DocumentLoader:
         try:
             from llama_index.core import SimpleDirectoryReader
 
-            file_path_obj = Path(file_path)
-            if not file_path_obj.exists():
+            if not file_path.exists():
                 logger.error(f"File {file_path} does not exist")
                 return []
 
             # Use SimpleDirectoryReader with specific file
             reader = SimpleDirectoryReader(
-                input_files=[str(file_path_obj)], recursive=False
+                input_files=[str(file_path)], recursive=False
             )
 
             documents = reader.load_data()
@@ -143,7 +142,7 @@ def load_and_index_documents(rag_service: RAGService) -> bool:
             all_documents = []
             for file_path in document_files:
                 logger.info(f"Loading document: {file_path}")
-                docs = loader.load_specific_document(str(file_path))
+                docs = loader.load_specific_document(file_path)
                 all_documents.extend(docs)
 
             documents = all_documents

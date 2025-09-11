@@ -19,8 +19,8 @@ from llama_index.vector_stores.postgres import PGVectorStore
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
-from .config import settings
-from .schemas import SourceDocument, QueryRequest, QueryResponse
+from src.config import settings
+from src.schemas import QueryRequest, QueryResponse, SourceDocument
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -87,11 +87,7 @@ class RAGRepository:
     def _setup_database(self) -> None:
         """Setup the database connection, extension and vector store."""
         try:
-            db_url = (
-                f"postgresql://{settings.PG_USER}:{settings.PG_PASSWORD}"
-                f"@{settings.PG_HOST}:{settings.PG_PORT}/{settings.PG_DATABASE}"
-            )
-            self.engine = create_engine(db_url)
+            self.engine = create_engine(settings.database_url, echo=False)
             if self.engine:
                 with self.engine.connect() as conn:
                     conn.execute(text("SELECT 1"))

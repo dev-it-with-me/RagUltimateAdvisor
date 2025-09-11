@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     # Application Configuration
     DATA_FOLDER: Path = BASE_DIR / "data"
 
+    @property
+    def database_url(self) -> str:
+        """Construct PostgreSQL database URL."""
+        return f"postgresql://{self.PG_USER}:{self.PG_PASSWORD}@{self.PG_HOST}:{self.PG_PORT}/{self.PG_DATABASE}"
+
     model_config = SettingsConfigDict(
         env_prefix="APP_",
         env_file=".env",

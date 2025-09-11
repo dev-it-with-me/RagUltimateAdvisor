@@ -3,21 +3,25 @@ Service layer for handling business logic related to RAG operations.
 """
 
 import logging
+import time
 from pathlib import Path
 
 from llama_index.core import (
     SimpleDirectoryReader,
 )
 
+from src.history import HistoryService
+from src.schemas import QueryRequest, QueryResponse
+
 from .repositories import RAGRepository
-from .schemas import QueryRequest, QueryResponse, SourceDocument
 
 logger = logging.getLogger(__name__)
 
 
 class RAGService:
-    def __init__(self, rag_repository: RAGRepository):
+    def __init__(self, rag_repository: RAGRepository, history_service: HistoryService):
         self.rag_repository = rag_repository
+        self.history_service = history_service
 
     def get_health_status(self, include_index: bool = False) -> dict:
         """Get the health status of the RAG repository.
@@ -82,17 +86,29 @@ class RAGService:
         Returns:
             QueryResponse: The response object containing query results
         """
+        start_time = time.time()
+        error_message = None
+        success = True
+        result = QueryResponse(
+            chat_response="Error processing query.", source_documents=[]
+        )
         try:
-            result: QueryResponse = self.rag_repository.query(query_request)
-
-            if result is None:
-                return QueryResponse(
-                    chat_response="Error processing query.", source_documents=[]
-                )
-            return result
-
+            result = self.rag_repository.query(query_request)
         except Exception as e:
+            success = False
+            error_message = str(e)
             logger.error(f"Query failed for '{query_request}': {e}")
-            return QueryResponse(
-                chat_response="Error processing query.", source_documents=[]
-            )
+        finally:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            try:
+                self.history_service.save_query_history(
+                    query_request=query_request,
+                    query_response=result,
+                    response_time_ms=response_time_ms,
+                    success=success,
+                    error_message=error_message,
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to save query history: {e}")
+        return result
