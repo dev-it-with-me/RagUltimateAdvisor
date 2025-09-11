@@ -17,3 +17,14 @@ dependencies = [
     "pydantic-settings>=2.10.1",
     "sqlalchemy>=2.0.43",
 ]
+
+[tool.ruff]
+line-length = 88
+lint.select = ["E", "F", "W", "C90", "B", "I", "T"]
+lint.ignore = [
+    "T201",  # Allow print statements for debugging
+    "E501",  # Ignore line length (handled by black)
+]
+exclude = [
+    "*tests*",
+]

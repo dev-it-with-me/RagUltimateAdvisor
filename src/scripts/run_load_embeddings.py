@@ -11,11 +11,13 @@ from typing import List
 
 from llama_index.core.schema import Document
 
+from ..dependencies import get_rag_service
+from ..services import RAGService
+
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import settings  # type: ignore
-from repositories import rag_repository  # type: ignore
+from ..config import settings
 
 # Configure logging
 logging.basicConfig(
@@ -102,7 +104,7 @@ class DocumentLoader:
             return []
 
 
-def load_and_index_documents() -> bool:
+def load_and_index_documents(rag_service: RAGService) -> bool:
     """Main function to load and index documents.
 
     Returns:
@@ -115,7 +117,7 @@ def load_and_index_documents() -> bool:
         loader = DocumentLoader()
 
         # Check repository health (don't require existing index for loading)
-        health = rag_repository.health_check(require_index=False)
+        health = rag_service.get_health_status(include_index=False)
         logger.info(f"Repository health: {health}")
 
         if not all(health.values()):
@@ -129,7 +131,7 @@ def load_and_index_documents() -> bool:
         if not document_files:
             logger.warning(f"No supported documents found in {data_path}")
             # Try to load the specific PDF file mentioned
-            pdf_path = "/home/dev_it/dev/UltimateAdvisor/files/WFDF-Rules-of-Ultimate-2025-2028.pdf"
+            pdf_path = settings.DATA_FOLDER / "WFDF-Rules-of-Ultimate-2025-2028.pdf"
             logger.info(f"Attempting to load specific PDF: {pdf_path}")
             documents = loader.load_specific_document(pdf_path)
 
@@ -152,12 +154,12 @@ def load_and_index_documents() -> bool:
 
         # Index documents
         logger.info(f"Indexing {len(documents)} documents into vector store")
-        success = rag_repository.index_documents(documents)
+        success = rag_service.index_documents(documents)
 
         if success:
             logger.info("Document indexing completed successfully")
             # Log some statistics
-            doc_count = rag_repository.get_document_count()
+            doc_count = rag_service.get_document_count()
             logger.info(f"Total documents in vector store: {doc_count}")
         else:
             logger.error("Document indexing failed")
@@ -175,8 +177,9 @@ def main() -> None:
         logger.info("=" * 50)
         logger.info("Ultimate Advisor - Document Loading Script")
         logger.info("=" * 50)
+        rag_service: RAGService = get_rag_service()
 
-        success = load_and_index_documents()
+        success = load_and_index_documents(rag_service)
 
         if success:
             logger.info("✓ Document loading and indexing completed successfully")

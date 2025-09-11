@@ -5,22 +5,22 @@ including vector storage, document indexing, and query operations.
 """
 
 import logging
+import traceback
 from contextlib import suppress
-from pathlib import Path
+
 from llama_index.core import (
-    VectorStoreIndex,
-    SimpleDirectoryReader,
     Settings,
     StorageContext,
+    VectorStoreIndex,
 )
-from llama_index.core.schema import Document
 from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.llms.ollama import Ollama
 from llama_index.vector_stores.postgres import PGVectorStore
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
-from config import settings
+from .config import settings
+from .schemas import SourceDocument, QueryRequest, QueryResponse
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -131,11 +131,6 @@ class RAGRepository:
     def index_documents(self, documents: list) -> bool:
         """Index documents into the vector store."""
         try:
-            if not documents:
-                logger.warning("No documents to index")
-                return False
-            logger.info(f"Indexing {len(documents)} documents")
-
             logger.info("Creating index from documents...")
             self.storage_context = StorageContext.from_defaults(
                 vector_store=self.vector_store
@@ -151,31 +146,11 @@ class RAGRepository:
 
         except Exception as e:
             logger.error(f"Error indexing documents: {e}")
-            import traceback
 
             traceback.print_exc()
             return False
 
-    def index_documents_from_directory(self, directory_path: Path) -> bool:
-        """Index all documents from a directory.
-
-        Args:
-            directory_path: Path to the directory containing documents
-
-        Returns:
-            bool: True if indexing was successful
-        """
-        try:
-            documents = SimpleDirectoryReader(directory_path).load_data()
-            return self.index_documents(documents)
-
-        except Exception as e:
-            logger.error(
-                f"Failed to index documents from directory {directory_path}: {e}"
-            )
-            return False
-
-    def query(self, query_text: str, similarity_top_k: int = 5) -> None | str:
+    def query(self, query_request: QueryRequest) -> QueryResponse:
         """Query the RAG system.
 
         Args:
@@ -183,22 +158,21 @@ class RAGRepository:
             similarity_top_k: Number of similar documents to retrieve
 
         Returns:
-            Optional[str]: The response text or None if query failed
+            Optional[dict]: Dictionary containing 'response' and 'source_documents' or None if query failed
         """
         try:
-            # First check basic health (database, vector_store, models)
             health = self.health_check(require_index=False)
             basic_health = {k: v for k, v in health.items() if k != "index"}
             if not all(basic_health.values()):
                 logger.error("System not ready for queries - basic components failed")
                 logger.error(f"Health status: {health}")
-                return None
+                raise ValueError("System not healthy for queries")
 
             # Check if we have documents in the vector store
             doc_count = self.get_document_count()
             if doc_count == 0:
                 logger.error("No documents in vector store - cannot perform queries")
-                return None
+                raise ValueError("No documents in vector store")
 
             logger.info(f"Vector store contains {doc_count} documents")
 
@@ -210,22 +184,36 @@ class RAGRepository:
                     logger.info("✓ Index successfully created from vector store")
                 else:
                     logger.error("Vector store not initialized")
-                    return None
+                    raise ValueError("Vector store not initialized")
 
             # Perform the query
-            logger.info(f"Executing query: '{query_text[:50]}...'")
-            query_engine = self.index.as_query_engine(similarity_top_k=similarity_top_k)
-            response = query_engine.query(query_text)
+            logger.info(f"Executing query: '{query_request.query[:50]}...'")
+            query_engine = self.index.as_query_engine(
+                similarity_top_k=query_request.top_k
+            )
+            response = query_engine.query(query_request.query)
+
+            # Extract source documents with scores
+            source_documents: list[SourceDocument] = []
+            if hasattr(response, "source_nodes") and response.source_nodes:
+                for node in response.source_nodes:
+                    source_doc = SourceDocument(
+                        content=node.text,
+                        score=getattr(node, "score", 0.0),
+                        metadata=node.metadata if hasattr(node, "metadata") else {},
+                    )
+                    source_documents.append(source_doc)
 
             logger.info("Query executed successfully")
-            return str(response)
+            return QueryResponse(
+                chat_response=str(response), source_documents=source_documents
+            )
 
         except Exception as e:
             logger.error(f"Failed to execute query: {e}")
-            import traceback
 
             logger.error(f"Traceback: {traceback.format_exc()}")
-            return None
+            raise
 
     def get_document_count(self) -> int:
         """Get the total number of documents in the vector store.

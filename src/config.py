@@ -1,12 +1,11 @@
 """Configuration module for the Ultimate Advisor application."""
 
-import sys
 from pathlib import Path
-
-BASE_DIR = Path(__file__).parent.parent
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BASE_DIR = Path(__file__).parent.parent
 
 
 class Settings(BaseSettings):
