@@ -1,0 +1,92 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.625rem;
+}
+
+/* Force dark mode - remove light mode variables and use your custom colors */
+:root,
+.dark {
+  /* Your custom brand colors converted to OKLCH */
+  --background: oklch(0.184 0.025 258); /* #2b3040 - dark blue-gray background */
+  --foreground: oklch(0.918 0.013 295); /* #cbc5d9 - light purple for text */
+  --card: oklch(0.224 0.032 258); /* Slightly lighter than background */
+  --card-foreground: oklch(0.918 0.013 295); /* #cbc5d9 */
+  --popover: oklch(0.224 0.032 258);
+  --popover-foreground: oklch(0.918 0.013 295);
+  --primary: oklch(0.445 0.144 285); /* #5A24A6 - dark purple for primary actions */
+  --primary-foreground: oklch(0.98 0.005 295); /* Very light text on primary */
+  --secondary: oklch(0.653 0.063 288); /* #9f96d9 - medium purple for secondary */
+  --secondary-foreground: oklch(0.184 0.025 258); /* Dark text on secondary */
+  --muted: oklch(0.284 0.032 258); /* Muted version of background */
+  --muted-foreground: oklch(0.768 0.013 295); /* Muted text */
+  --accent: oklch(0.853 0.042 125); /* #bddaaa - light green for accents */
+  --accent-foreground: oklch(0.184 0.025 258); /* Dark text on accent */
+  --destructive: oklch(0.577 0.245 27.325); /* Keep red for destructive actions */
+  --border: oklch(0.384 0.042 258); /* Subtle border color */
+  --input: oklch(0.284 0.032 258); /* Input background */
+  --ring: oklch(0.653 0.063 288); /* #9f96d9 for focus rings */
+  --chart-1: oklch(0.853 0.042 125); /* #bddaaa - light green */
+  --chart-2: oklch(0.918 0.013 295); /* #cbc5d9 - light purple */
+  --chart-3: oklch(0.653 0.063 288); /* #9f96d9 - medium purple */
+  --chart-4: oklch(0.445 0.144 285); /* #5A24A6 - dark purple */
+  --chart-5: oklch(0.184 0.025 258); /* #2b3040 - dark blue-gray */
+  --sidebar: oklch(0.204 0.028 258); /* Slightly lighter than background */
+  --sidebar-foreground: oklch(0.918 0.013 295);
+  --sidebar-primary: oklch(0.445 0.144 285);
+  --sidebar-primary-foreground: oklch(0.98 0.005 295);
+  --sidebar-accent: oklch(0.853 0.042 125);
+  --sidebar-accent-foreground: oklch(0.184 0.025 258);
+  --sidebar-border: oklch(0.384 0.042 258);
+  --sidebar-ring: oklch(0.653 0.063 288);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
