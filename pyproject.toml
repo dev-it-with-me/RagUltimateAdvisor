@@ -25,6 +25,7 @@ lint.select = ["E", "F", "W", "C90", "B", "I", "T"]
 lint.ignore = [
     "T201",  # Allow print statements for debugging
     "E501",  # Ignore line length (handled by black)
+    "B008",  # Ignore Depends
 ]
 exclude = [
     "*tests*",

@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 class HistoryService:
     """Service for tracking RAG query history."""
 
-    def __init__(self):
-        self.repository = HistoryRepository()
+    def __init__(self, repository: HistoryRepository):
+        self.repository = repository
 
     def save_query_history(
         self,

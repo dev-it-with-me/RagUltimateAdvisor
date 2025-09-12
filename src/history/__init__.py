@@ -1,4 +1,10 @@
+from .dependencies import get_history_service
 from .models import QueryHistory, SourceDocumentHistory
-from .service import HistoryService
+from .services import HistoryService
 
-__all__ = ["HistoryService", "QueryHistory", "SourceDocumentHistory"]
+__all__ = [
+    "HistoryService",
+    "get_history_service",
+    "QueryHistory",
+    "SourceDocumentHistory",
+]

@@ -24,3 +24,42 @@ class QueryResponse(BaseModel):
         default_factory=list,
         description="List of source documents that were used as context for the response.",
     )
+
+
+class HealthStatusResponse(BaseModel):
+    """Health status response for RAG system components."""
+
+    vector_store: bool = Field(..., description="Vector store availability status")
+    embedding_model: bool = Field(
+        ..., description="Embedding model availability status"
+    )
+    chat_model: bool = Field(..., description="Chat model availability status")
+    index_status: bool | None = Field(
+        None, description="Vector store index status (optional)"
+    )
+
+
+class DocumentCountResponse(BaseModel):
+    """Response for document count endpoint."""
+
+    document_count: int = Field(
+        ..., description="Total number of documents in vector store"
+    )
+    message: str = Field(..., description="Human-readable message about document count")
+
+
+class APIInfoResponse(BaseModel):
+    """Response for root endpoint providing API information."""
+
+    message: str = Field(..., description="Welcome message")
+    description: str = Field(..., description="API description")
+    version: str = Field(..., description="API version")
+    endpoints: dict[str, str] = Field(..., description="Available API endpoints")
+
+
+class HealthCheckResponse(BaseModel):
+    """Response for health check endpoint."""
+
+    status: str = Field(..., description="Health status")
+    service: str = Field(..., description="Service name")
+    version: str = Field(..., description="Service version")
