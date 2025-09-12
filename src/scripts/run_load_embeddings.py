@@ -11,13 +11,11 @@ from typing import List
 
 from llama_index.core.schema import Document
 
-from src.dependencies import get_rag_service
-from src.rag import RAGService
-
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from src.config import settings
+from src.dependencies import get_rag_service
+from src.rag import RAGService
 
 # Configure logging
 logging.basicConfig(
