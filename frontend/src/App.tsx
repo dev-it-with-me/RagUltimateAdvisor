@@ -5,14 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   Plus,
   MessageSquare,
   Bot,
@@ -353,7 +345,7 @@ function App() {
                 )}
               </div>
 
-              {/* Extracted Data Section */}
+              {/* Source Documents Section */}
               <div className="mt-8">
                 <h2 className="text-lg font-semibold text-foreground mb-4">
                   Source Documents
@@ -367,45 +359,82 @@ function App() {
                     </p>
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-border overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50">
-                          <TableHead className="text-muted-foreground">
-                            CONTENT PREVIEW
-                          </TableHead>
-                          <TableHead className="text-muted-foreground">
-                            SIMILARITY SCORE
-                          </TableHead>
-                          <TableHead className="text-muted-foreground">
-                            RELEVANCE
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {currentSourceDocuments.map((doc, index) => (
-                          <TableRow key={index}>
-                            <TableCell className="font-medium text-foreground max-w-md">
-                              <div className="truncate" title={doc.content}>
-                                {doc.content.length > 100
-                                  ? `${doc.content.substring(0, 100)}...`
-                                  : doc.content}
+                  <div className="space-y-4">
+                    {currentSourceDocuments.map((doc, index) => (
+                      <div
+                        key={index}
+                        className="rounded-lg border border-border bg-card hover:bg-muted/20 transition-colors duration-200"
+                      >
+                        <div className="p-4">
+                          {/* Header with score and relevance */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-primary"></div>
+                                <span className="text-sm font-medium text-muted-foreground">
+                                  Document {index + 1}
+                                </span>
                               </div>
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {doc.score.toFixed(3)}
-                            </TableCell>
-                            <TableCell>
                               <Badge
                                 variant={getRelevanceBadgeVariant(doc.score)}
+                                className="text-xs"
                               >
                                 {getRelevanceLabel(doc.score)}
                               </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                Similarity:
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-primary rounded-full transition-all duration-300"
+                                    style={{
+                                      width: `${Math.min(
+                                        doc.score * 100,
+                                        100
+                                      )}%`,
+                                    }}
+                                  ></div>
+                                </div>
+                                <span className="text-xs font-mono text-muted-foreground min-w-[3rem] text-right">
+                                  {doc.score.toFixed(3)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Content preview */}
+                          <div className="text-sm text-foreground leading-relaxed">
+                            <div className="relative">
+                              {doc.content.length > 200 ? (
+                                <>
+                                  <p className="text-foreground/90">
+                                    {doc.content.substring(0, 200)}
+                                    <span className="text-muted-foreground">
+                                      ...
+                                    </span>
+                                  </p>
+                                  <details className="mt-2 group">
+                                    <summary className="cursor-pointer text-xs text-primary hover:text-primary/80 transition-colors select-none">
+                                      Show full content
+                                    </summary>
+                                    <div className="mt-2 p-3 bg-muted/30 rounded border-l-2 border-primary/30 text-foreground/90 text-xs leading-relaxed">
+                                      {doc.content}
+                                    </div>
+                                  </details>
+                                </>
+                              ) : (
+                                <p className="text-foreground/90">
+                                  {doc.content}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

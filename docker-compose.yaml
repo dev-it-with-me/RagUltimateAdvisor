@@ -10,6 +10,8 @@ services:
       POSTGRES_DB: ${APP_PG_DATABASE}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
 
   ollama:
     image: ollama/ollama:latest
@@ -37,7 +39,39 @@ services:
         "ollama serve & sleep 5 && (ollama pull ${APP_CHAT_MODEL} || echo 'Failed to pull chat model') && (ollama pull ${APP_EMBEDDING_MODEL} || echo 'Failed to pull embedding model') && wait",
       ]
     restart: no
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ultimate-advisor-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_PG_HOST=db
+      - APP_PG_PORT=5432
+      - APP_PG_USER=${APP_PG_USER}
+      - APP_PG_PASSWORD=${APP_PG_PASSWORD}
+      - APP_PG_DATABASE=${APP_PG_DATABASE}
+      - APP_OLLAMA_BASE_URL=http://ollama:11434
+      - APP_CHAT_MODEL=${APP_CHAT_MODEL}
+      - APP_EMBEDDING_MODEL=${APP_EMBEDDING_MODEL}
+    depends_on:
+      - db
+      - ollama
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - app-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   ollama_data:
+
+networks:
+  app-network:
+    driver: bridge

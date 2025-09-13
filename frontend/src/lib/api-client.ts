@@ -9,7 +9,9 @@ import type {
 } from "@/types/api";
 
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+// In production (when served by FastAPI), use relative URLs
+// In development, use environment variable or fallback to localhost
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 // API Client with error handling
 class ApiClient {

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.history.routes import history_router
@@ -70,7 +70,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",  # React default
-        "http://localhost:5173",  # Vite default
+        "http://localhost:5173",  # Vite default (for standalone development)
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
     ],
@@ -117,6 +117,45 @@ static_path = Path("files")
 if static_path.exists() and static_path.is_dir():
     app.mount("/files", StaticFiles(directory="files"), name="files")
     logger.info("Static files mounted at /files")
+
+
+# Frontend static files serving
+frontend_dist_path = Path("frontend/dist")
+if frontend_dist_path.exists() and frontend_dist_path.is_dir():
+    # Mount static assets (JS, CSS, images)
+    app.mount(
+        "/assets", StaticFiles(directory=frontend_dist_path / "assets"), name="assets"
+    )
+    logger.info("Frontend assets mounted at /assets")
+
+    # Serve index.html for SPA routing
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """Serve the SPA for all non-API routes."""
+        # Don't serve SPA for API routes
+        if (
+            full_path.startswith("api/")
+            or full_path.startswith("docs")
+            or full_path.startswith("redoc")
+            or full_path.startswith("files/")
+        ):
+            raise HTTPException(status_code=404, detail="Not found")
+
+        # Serve static files if they exist
+        file_path = frontend_dist_path / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+
+        # Serve index.html for SPA routing
+        index_file = frontend_dist_path / "index.html"
+        if index_file.exists():
+            return FileResponse(index_file)
+
+        raise HTTPException(status_code=404, detail="Frontend not found")
+
+    logger.info("SPA routing configured for frontend")
+else:
+    logger.warning("Frontend dist directory not found - frontend will not be served")
 
 
 @app.exception_handler(500)
