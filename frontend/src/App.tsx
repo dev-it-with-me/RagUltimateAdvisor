@@ -336,7 +336,13 @@ function App() {
                 >
                   <div className="flex-1 min-w-0">
                     <span className="text-sm block truncate">{chat.name}</span>
-                    <span className="text-xs text-muted-foreground">
+                    <span
+                      className={`text-xs ${
+                        activeChat === chat.id
+                          ? "text-black/60"
+                          : "text-muted-foreground"
+                      }`}
+                    >
                       {new Date(chat.created_at).toLocaleDateString()}
                     </span>
                   </div>
