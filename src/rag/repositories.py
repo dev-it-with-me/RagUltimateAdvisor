@@ -13,6 +13,7 @@ from llama_index.core import (
     StorageContext,
     VectorStoreIndex,
 )
+from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.llms.ollama import Ollama
 from llama_index.vector_stores.postgres import PGVectorStore
@@ -125,24 +126,61 @@ class RAGRepository:
             raise
 
     def index_documents(self, documents: list) -> bool:
-        """Index documents into the vector store."""
+        """Index documents into the vector store.
+
+        Optimized for small document collections (single document with ~17 pages).
+        Uses smaller chunk sizes and reduced overlap for better granularity.
+        """
         try:
             logger.info("Creating index from documents...")
+            logger.info(f"Number of documents to index: {len(documents)}")
+
+            # Configure text splitter optimized for small documents
+            # Smaller chunks (256 tokens) for better granularity on a 17-page document
+            # Reduced overlap (20 tokens) since we have limited content
+            text_splitter = SentenceSplitter(
+                chunk_size=256,  # Smaller chunks for better precision
+                chunk_overlap=20,  # Minimal overlap for small docs
+                separator=".\n",  # Split on periods primarily
+                paragraph_separator="\n\n\n",  # Respect paragraph boundaries
+            )
+
+            # Configure the node parser in Settings
+            Settings.text_splitter = text_splitter
+
             self.storage_context = StorageContext.from_defaults(
                 vector_store=self.vector_store
             )
+
+            # Create index with optimized settings for small documents
             self.index = VectorStoreIndex.from_documents(
                 documents,
                 storage_context=self.storage_context,
                 embed_model=Settings.embed_model,
                 show_progress=True,
+                # Use the configured text splitter
+                transformations=[text_splitter],
             )
-            logger.info("Documents indexed successfully")
+
+            # Log indexing statistics
+            if self.index:
+                try:
+                    # Get number of nodes created
+                    docstore = self.index.docstore
+                    node_count = (
+                        len(docstore.docs) if hasattr(docstore, "docs") else "unknown"
+                    )
+                    logger.info(
+                        f"Documents indexed successfully - Created {node_count} text chunks"
+                    )
+                except Exception as e:
+                    logger.info("Documents indexed successfully")
+                    logger.debug(f"Could not retrieve node count: {e}")
+
             return True
 
         except Exception as e:
             logger.error(f"Error indexing documents: {e}")
-
             traceback.print_exc()
             return False
 
@@ -182,21 +220,67 @@ class RAGRepository:
                     logger.error("Vector store not initialized")
                     raise ValueError("Vector store not initialized")
 
-            # Perform the query
+            # Perform the query with optimized settings for small documents
             logger.info(f"Executing query: '{query_request.query[:50]}...'")
+
+            # For small documents, increase top_k slightly to get better coverage
+            # since we have smaller chunks now
+            optimized_top_k = min(
+                query_request.top_k * 2, 15
+            )  # Cap at 15 for performance
+
             query_engine = self.index.as_query_engine(
-                similarity_top_k=query_request.top_k
+                similarity_top_k=optimized_top_k,
+                # Use a more comprehensive response synthesis for small docs
+                response_mode="tree_summarize",  # Better for small document collections
+                # Increase the number of chunks used for response generation
+                similarity_cutoff=0.6,  # Include more relevant chunks
             )
             response = query_engine.query(query_request.query)
 
-            # Extract source documents with scores
+            # Extract source documents with scores (limit to original top_k for response)
             source_documents: list[SourceDocument] = []
             if hasattr(response, "source_nodes") and response.source_nodes:
-                for node in response.source_nodes:
+                # Take only the requested number of top documents for the response
+                top_nodes = response.source_nodes[: query_request.top_k]
+                for node in top_nodes:
+                    # Parse metadata to extract file_name and page
+                    node_metadata = node.metadata if hasattr(node, "metadata") else {}
+
+                    # Extract file_name from various possible metadata keys
+                    file_name = (
+                        node_metadata.get("file_name")
+                        or node_metadata.get("filename")
+                        or node_metadata.get("file_path", "").split("/")[-1]
+                        or "Unknown Document"
+                    )
+
+                    # Extract page number if available
+                    page = (
+                        node_metadata.get("page")
+                        or node_metadata.get("page_number")
+                        or node_metadata.get("page_label")
+                    )
+
+                    # Convert page to int if it's a string number
+                    if isinstance(page, str) and page.isdigit():
+                        page = int(page)
+                    elif not isinstance(page, int):
+                        page = None
+
+                    # Create structured metadata
+                    from src.schemas import DocumentMetadata
+
+                    structured_metadata = DocumentMetadata(
+                        file_name=file_name,
+                        page=page,
+                        source=node_metadata.get("file_path"),
+                    )
+
                     source_doc = SourceDocument(
                         content=node.text,
                         score=getattr(node, "score", 0.0),
-                        metadata=node.metadata if hasattr(node, "metadata") else {},
+                        metadata=structured_metadata,
                     )
                     source_documents.append(source_doc)
 

@@ -1,6 +1,16 @@
 from pydantic import BaseModel, Field
 
 
+class DocumentMetadata(BaseModel):
+    """Metadata for source documents."""
+
+    file_name: str = Field(..., description="Name of the source file.")
+    page: int | None = Field(
+        None, description="Page number in the document (if applicable)."
+    )
+    source: str | None = Field(None, description="Source or origin of the document.")
+
+
 class SourceDocument(BaseModel):
     """Represents a source document used for context in the RAG response."""
 
@@ -8,8 +18,8 @@ class SourceDocument(BaseModel):
     score: float = Field(
         ..., description="Similarity score of the document to the query."
     )
-    metadata: dict = Field(
-        default_factory=dict, description="Additional metadata about the document."
+    metadata: DocumentMetadata = Field(
+        ..., description="Structured metadata about the document."
     )
 
 

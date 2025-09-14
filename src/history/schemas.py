@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from ..schemas import DocumentMetadata
+
 
 class QueryHistoryResponse(BaseModel):
     """Schema for query history response."""
@@ -31,7 +33,7 @@ class SourceDocumentHistoryResponse(BaseModel):
     id: UUID
     content_preview: str
     similarity_score: float
-    document_metadata: None | str = None
+    document_metadata: DocumentMetadata | None = None
     created_at: datetime
 
     class Config:

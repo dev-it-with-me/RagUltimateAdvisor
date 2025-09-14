@@ -1,9 +1,15 @@
 // API Types matching backend schemas
 
+export interface DocumentMetadata {
+  file_name: string;
+  page?: number;
+  source?: string;
+}
+
 export interface SourceDocument {
   content: string;
   score: number;
-  metadata: Record<string, any>;
+  metadata: DocumentMetadata;
 }
 
 export interface QueryRequest {
@@ -32,7 +38,7 @@ export interface SourceDocumentHistoryResponse {
   id: string;
   content_preview: string;
   similarity_score: number;
-  document_metadata: string | null;
+  document_metadata: DocumentMetadata | null;
   created_at: string;
 }
 

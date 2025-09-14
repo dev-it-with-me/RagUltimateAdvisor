@@ -2,6 +2,7 @@
 Repository layer for query history data access.
 """
 
+import ast
 import json
 import logging
 from uuid import UUID
@@ -9,6 +10,7 @@ from uuid import UUID
 from sqlmodel import Session, create_engine, desc, select
 
 from src.config import settings
+from src.schemas import DocumentMetadata
 
 from .models import QueryHistory, SourceDocumentHistory
 from .schemas import (
@@ -78,7 +80,7 @@ class HistoryRepository:
         query_id: UUID,
         content_preview: str,
         similarity_score: float,
-        document_metadata: None | dict = None,
+        document_metadata: None | DocumentMetadata = None,
     ) -> None | SourceDocumentHistoryResponse:
         """Create a source document history record.
 
@@ -94,7 +96,9 @@ class HistoryRepository:
         try:
             with Session(self.engine) as session:
                 metadata_json = (
-                    json.dumps(document_metadata) if document_metadata else None
+                    json.dumps(document_metadata.model_dump(mode="json"))
+                    if document_metadata
+                    else None
                 )
 
                 source_doc = SourceDocumentHistory(
@@ -189,10 +193,38 @@ class HistoryRepository:
                     SourceDocumentHistory.query_id == query_id
                 )
                 results = session.exec(statement).all()
-                return [
-                    SourceDocumentHistoryResponse.model_validate(item)
-                    for item in results
-                ]
+
+                response_list = []
+                for item in results:
+                    if not item.id:
+                        continue
+
+                    parsed_metadata = None
+                    if item.document_metadata:
+                        try:
+                            try:
+                                metadata_dict = json.loads(item.document_metadata)
+                            except json.JSONDecodeError:
+                                metadata_dict = ast.literal_eval(item.document_metadata)
+                            parsed_metadata = DocumentMetadata.model_validate(
+                                metadata_dict
+                            )
+                        except (json.JSONDecodeError, ValueError, SyntaxError) as e:
+                            logger.warning(
+                                f"Failed to parse metadata for document {item.id}: {e}\n{item.document_metadata}"
+                            )
+
+                    # Create response with parsed metadata
+                    response = SourceDocumentHistoryResponse(
+                        id=item.id,
+                        content_preview=item.content_preview,
+                        similarity_score=item.similarity_score,
+                        document_metadata=parsed_metadata,
+                        created_at=item.created_at,
+                    )
+                    response_list.append(response)
+
+                return response_list
 
         except Exception as e:
             logger.error(f"Failed to get source documents for query {query_id}: {e}")

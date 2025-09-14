@@ -6,13 +6,15 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Plus,
-  MessageSquare,
   Bot,
   User,
-  Paperclip,
   Send,
   Loader2,
   AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  FileText,
 } from "lucide-react";
 import {
   useQueryHistory,
@@ -22,6 +24,126 @@ import {
   convertQueryHistoryToChats,
 } from "@/hooks/useApi";
 import type { Message, SourceDocument } from "@/types/api";
+
+// Source Document Card Component
+interface SourceDocumentCardProps {
+  doc: SourceDocument;
+  index: number;
+}
+
+const SourceDocumentCard = ({ doc }: SourceDocumentCardProps) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const handleDownload = () => {
+    const downloadUrl = `/files/download/${encodeURIComponent(
+      doc.metadata.file_name
+    )}`;
+    window.open(downloadUrl, "_blank");
+  };
+
+  const getRelevanceBadgeVariant = (score: number) => {
+    if (score >= 0.7) return "default";
+    if (score >= 0.5) return "secondary";
+    return "outline";
+  };
+
+  const getRelevanceLabel = (score: number) => {
+    if (score >= 0.7) return "High Relevance";
+    if (score >= 0.5) return "Medium Relevance";
+    return "Low Relevance";
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card hover:bg-muted/20 transition-colors duration-200">
+      <div className="p-4">
+        {/* Header with file info and score */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-primary" />
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-foreground">
+                  {doc.metadata.file_name}
+                </span>
+                {doc.metadata.page && (
+                  <span className="text-xs text-muted-foreground">
+                    Page {doc.metadata.page}
+                  </span>
+                )}
+              </div>
+            </div>
+            <Badge
+              variant={getRelevanceBadgeVariant(doc.score)}
+              className="text-xs"
+            >
+              {getRelevanceLabel(doc.score)}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDownload}
+              className="h-6 px-2 text-xs hover:bg-primary/10"
+            >
+              <Download className="w-3 h-3 mr-1" />
+              Download
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Similarity:</span>
+            <div className="flex items-center gap-1">
+              <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.min(doc.score * 100, 100)}%`,
+                  }}
+                ></div>
+              </div>
+              <span className="text-xs font-mono text-muted-foreground min-w-[3rem] text-right">
+                {doc.score.toFixed(3)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Content preview */}
+        <div className="text-sm text-foreground leading-relaxed">
+          <div className="relative">
+            {doc.content.length > 200 ? (
+              <>
+                <p className="text-foreground/90">
+                  {isExpanded
+                    ? doc.content
+                    : `${doc.content.substring(0, 200)}...`}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="mt-2 h-6 px-2 text-xs text-primary hover:text-primary/80 hover:bg-primary/10"
+                >
+                  {isExpanded ? (
+                    <>
+                      <ChevronUp className="w-3 h-3 mr-1" />
+                      Show less
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="w-3 h-3 mr-1" />
+                      Show full content
+                    </>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <p className="text-foreground/90">{doc.content}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 function App() {
   const [inputMessage, setInputMessage] = useState("");
@@ -67,9 +189,11 @@ function App() {
           source_documents: selectedQuery.source_documents.map((doc) => ({
             content: doc.content_preview,
             score: doc.similarity_score,
-            metadata: doc.document_metadata
-              ? JSON.parse(doc.document_metadata)
-              : {},
+            metadata: doc.document_metadata || {
+              file_name: "Unknown",
+              page: undefined,
+              source: undefined,
+            },
           })),
         },
       ];
@@ -80,9 +204,11 @@ function App() {
         (doc) => ({
           content: doc.content_preview,
           score: doc.similarity_score,
-          metadata: doc.document_metadata
-            ? JSON.parse(doc.document_metadata)
-            : {},
+          metadata: doc.document_metadata || {
+            file_name: "Unknown",
+            page: undefined,
+            source: undefined,
+          },
         })
       );
       setCurrentSourceDocuments(sourceDocs);
@@ -157,18 +283,6 @@ function App() {
     setActiveChat(chatId);
   };
 
-  const getRelevanceBadgeVariant = (score: number) => {
-    if (score >= 0.8) return "default" as const;
-    if (score >= 0.5) return "secondary" as const;
-    return "outline" as const;
-  };
-
-  const getRelevanceLabel = (score: number) => {
-    if (score >= 0.8) return "High";
-    if (score >= 0.5) return "Medium";
-    return "Low";
-  };
-
   return (
     <div className="h-screen bg-background flex">
       {/* Sidebar */}
@@ -220,7 +334,6 @@ function App() {
                       : "hover:bg-muted text-muted-foreground"
                   }`}
                 >
-                  <MessageSquare className="w-4 h-4" />
                   <div className="flex-1 min-w-0">
                     <span className="text-sm block truncate">{chat.name}</span>
                     <span className="text-xs text-muted-foreground">
@@ -361,79 +474,7 @@ function App() {
                 ) : (
                   <div className="space-y-4">
                     {currentSourceDocuments.map((doc, index) => (
-                      <div
-                        key={index}
-                        className="rounded-lg border border-border bg-card hover:bg-muted/20 transition-colors duration-200"
-                      >
-                        <div className="p-4">
-                          {/* Header with score and relevance */}
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-3">
-                              <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-primary"></div>
-                                <span className="text-sm font-medium text-muted-foreground">
-                                  Document {index + 1}
-                                </span>
-                              </div>
-                              <Badge
-                                variant={getRelevanceBadgeVariant(doc.score)}
-                                className="text-xs"
-                              >
-                                {getRelevanceLabel(doc.score)}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground">
-                                Similarity:
-                              </span>
-                              <div className="flex items-center gap-1">
-                                <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full bg-primary rounded-full transition-all duration-300"
-                                    style={{
-                                      width: `${Math.min(
-                                        doc.score * 100,
-                                        100
-                                      )}%`,
-                                    }}
-                                  ></div>
-                                </div>
-                                <span className="text-xs font-mono text-muted-foreground min-w-[3rem] text-right">
-                                  {doc.score.toFixed(3)}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Content preview */}
-                          <div className="text-sm text-foreground leading-relaxed">
-                            <div className="relative">
-                              {doc.content.length > 200 ? (
-                                <>
-                                  <p className="text-foreground/90">
-                                    {doc.content.substring(0, 200)}
-                                    <span className="text-muted-foreground">
-                                      ...
-                                    </span>
-                                  </p>
-                                  <details className="mt-2 group">
-                                    <summary className="cursor-pointer text-xs text-primary hover:text-primary/80 transition-colors select-none">
-                                      Show full content
-                                    </summary>
-                                    <div className="mt-2 p-3 bg-muted/30 rounded border-l-2 border-primary/30 text-foreground/90 text-xs leading-relaxed">
-                                      {doc.content}
-                                    </div>
-                                  </details>
-                                </>
-                              ) : (
-                                <p className="text-foreground/90">
-                                  {doc.content}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                      <SourceDocumentCard key={index} doc={doc} index={index} />
                     ))}
                   </div>
                 )}
@@ -468,14 +509,6 @@ function App() {
                   className="pr-12"
                   disabled={isSendingMessage}
                 />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 p-0"
-                  disabled={isSendingMessage}
-                >
-                  <Paperclip className="w-4 h-4" />
-                </Button>
               </div>
               <Button
                 onClick={handleSendMessage}
