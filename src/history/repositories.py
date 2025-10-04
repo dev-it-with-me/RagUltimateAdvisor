@@ -5,6 +5,7 @@ Repository layer for query history data access.
 import ast
 import json
 import logging
+from typing import Any
 from uuid import UUID
 
 from sqlmodel import Session, create_engine, desc, select
@@ -27,6 +28,27 @@ class HistoryRepository:
 
     def __init__(self):
         self.engine = create_engine(settings.database_url)
+
+    @staticmethod
+    def _parse_document_metadata(
+        raw_metadata: Any,
+    ) -> DocumentMetadata | None:
+        """Convert stored metadata into a DocumentMetadata instance."""
+
+        if raw_metadata is None:
+            return None
+        if isinstance(raw_metadata, DocumentMetadata):
+            return raw_metadata
+        if isinstance(raw_metadata, dict):
+            return DocumentMetadata.model_validate(raw_metadata)
+        if isinstance(raw_metadata, str):
+            try:
+                metadata_dict = json.loads(raw_metadata)
+            except json.JSONDecodeError:
+                metadata_dict = ast.literal_eval(raw_metadata)
+            return DocumentMetadata.model_validate(metadata_dict)
+
+        raise ValueError("Unsupported metadata format")
 
     def create_query_history(
         self,
@@ -95,11 +117,14 @@ class HistoryRepository:
         """
         try:
             with Session(self.engine) as session:
-                metadata_json = (
-                    json.dumps(document_metadata.model_dump(mode="json"))
-                    if document_metadata
-                    else None
-                )
+                metadata_json = None
+                parsed_metadata = None
+                if document_metadata is not None:
+                    parsed_metadata = self._parse_document_metadata(document_metadata)
+                    if parsed_metadata is not None:
+                        metadata_json = json.dumps(
+                            parsed_metadata.model_dump(mode="json")
+                        )
 
                 source_doc = SourceDocumentHistory(
                     query_id=query_id,
@@ -112,7 +137,16 @@ class HistoryRepository:
                 session.commit()
                 session.refresh(source_doc)
 
-                return SourceDocumentHistoryResponse.model_validate(source_doc)
+                if source_doc.id is None:
+                    raise ValueError("Source document history ID not generated")
+
+                return SourceDocumentHistoryResponse(
+                    id=source_doc.id,
+                    content_preview=source_doc.content_preview,
+                    similarity_score=source_doc.similarity_score,
+                    document_metadata=parsed_metadata,
+                    created_at=source_doc.created_at,
+                )
 
         except Exception as e:
             logger.error(f"Failed to create source document history: {e}")
@@ -202,14 +236,10 @@ class HistoryRepository:
                     parsed_metadata = None
                     if item.document_metadata:
                         try:
-                            try:
-                                metadata_dict = json.loads(item.document_metadata)
-                            except json.JSONDecodeError:
-                                metadata_dict = ast.literal_eval(item.document_metadata)
-                            parsed_metadata = DocumentMetadata.model_validate(
-                                metadata_dict
+                            parsed_metadata = self._parse_document_metadata(
+                                item.document_metadata
                             )
-                        except (json.JSONDecodeError, ValueError, SyntaxError) as e:
+                        except (ValueError, SyntaxError, json.JSONDecodeError) as e:
                             logger.warning(
                                 f"Failed to parse metadata for document {item.id}: {e}\n{item.document_metadata}"
                             )
