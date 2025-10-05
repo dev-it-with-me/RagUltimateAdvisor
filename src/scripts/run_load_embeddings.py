@@ -7,7 +7,6 @@ into the vector store for RAG operations.
 import logging
 import sys
 from pathlib import Path
-from typing import List
 
 from llama_index.core import SimpleDirectoryReader
 from llama_index.core.schema import Document
@@ -33,15 +32,9 @@ class DocumentLoader:
         """Initialize the document loader."""
         self.supported_extensions = {
             ".pdf",
-            ".txt",
-            ".md",
-            ".docx",
-            ".html",
-            ".json",
-            ".csv",
         }
 
-    def get_document_files(self, directory_path: str) -> List[Path]:
+    def get_document_files(self, directory_path: str) -> list[Path]:
         """Get all supported document files from the directory.
 
         Args:
@@ -71,7 +64,7 @@ class DocumentLoader:
         logger.info(f"Found {len(document_files)} document files in {directory_path}")
         return document_files
 
-    def load_specific_document(self, file_path: Path) -> List[Document]:
+    def load_specific_document(self, file_path: Path) -> list[Document]:
         """Load a specific document file.
 
         Args:
@@ -119,30 +112,18 @@ def load_and_index_documents(rag_service: RAGService) -> bool:
         data_path = Path(settings.DATA_FOLDER)
         document_files = loader.get_document_files(str(data_path))
 
-        if not document_files:
-            logger.warning(f"No supported documents found in {data_path}")
-            pdf_path = settings.DATA_FOLDER / "WFDF-Rules-of-Ultimate-2025-2028.pdf"
-            logger.info(f"Attempting to load specific PDF: {pdf_path}")
-            documents = loader.load_specific_document(pdf_path)
+        all_documents = []
+        for file_path in document_files:
+            logger.info(f"Loading document: {file_path}")
+            docs = loader.load_specific_document(file_path)
+            all_documents.extend(docs)
 
-            if not documents:
-                logger.error("No documents could be loaded")
-                return False
-        else:
-            all_documents = []
-            for file_path in document_files:
-                logger.info(f"Loading document: {file_path}")
-                docs = loader.load_specific_document(file_path)
-                all_documents.extend(docs)
-
-            documents = all_documents
-
-        if not documents:
+        if not all_documents:
             logger.error("No documents were loaded")
             return False
 
-        logger.info(f"Indexing {len(documents)} documents into vector store")
-        success = rag_service.index_documents(documents)
+        logger.info(f"Indexing {len(all_documents)} documents into vector store")
+        success = rag_service.index_documents(all_documents)
 
         if success:
             logger.info("Document indexing completed successfully")
