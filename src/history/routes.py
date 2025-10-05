@@ -49,12 +49,10 @@ async def get_query_by_id(
     Returns:
         QueryDetailResponse: Detailed query information with source documents
     """
-    # Get the query history
     query_history = history_service.get_query_by_id(query_id)
     if not query_history:
         raise HTTPException(status_code=404, detail=f"Query not found: {query_id}")
 
-    # Get the source documents for this query
     source_documents = history_service.get_source_documents_for_query(query_id)
 
     return QueryDetailResponse(
@@ -79,7 +77,6 @@ async def get_source_documents_for_query(
     Returns:
         list[SourceDocumentHistoryResponse]: List of source documents used in the query
     """
-    # First check if the query exists
     query_history = history_service.get_query_by_id(query_id)
     if not query_history:
         raise HTTPException(status_code=404, detail=f"Query not found: {query_id}")

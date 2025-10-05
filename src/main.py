@@ -1,4 +1,5 @@
 import logging
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -13,46 +14,36 @@ from src.rag.routes import rag_router
 from src.schemas import APIInfoResponse, HealthCheckResponse
 
 
-# Configure logging with file output
 def setup_logging():
     """Configure logging to save to timestamped files."""
-    # Create logs directory if it doesn't exist
     log_dir = Path("logs/server_logs")
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create timestamped log file name
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = log_dir / f"{timestamp}.log"
 
-    # Configure logging
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
-            # File handler for saving to file
             logging.FileHandler(log_file, encoding="utf-8"),
-            # Console handler for terminal output
             logging.StreamHandler(),
         ],
     )
 
-    # Log the startup information
     logger = logging.getLogger(__name__)
     logger.info(f"Logging initialized. Log file: {log_file}")
     return logger
 
 
-# Setup logging and get logger
 logger = setup_logging()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Load the ML model
     logger.info("🚀 Ultimate Advisor API server started successfully")
     logger.info("📚 RAG-based chat system for Ultimate Frisbee rules and guidance")
     yield
-    # Clean up the ML models and release the resources
     logger.info("🛑 Ultimate Advisor API server shutting down")
 
 
@@ -65,12 +56,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",  # React default
-        "http://localhost:5173",  # Vite default (for standalone development)
+        "http://localhost:3000",
+        "http://localhost:5173",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
     ],
@@ -80,25 +70,20 @@ app.add_middleware(
 )
 
 
-# Add request logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     """Log all HTTP requests and responses."""
     start_time = datetime.now()
 
-    # Log request
     logger.info(
         f"Request: {request.method} {request.url.path} "
         f"from {request.client.host if request.client else 'unknown'}"
     )
 
-    # Process request
     response = await call_next(request)
 
-    # Calculate processing time
     process_time = (datetime.now() - start_time).total_seconds()
 
-    # Log response
     logger.info(
         f"Response: {response.status_code} for {request.method} {request.url.path} "
         f"- {process_time:.3f}s"
@@ -107,12 +92,10 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-# Include routers
 app.include_router(history_router)
 app.include_router(rag_router)
 
 
-# File download endpoint
 @app.get("/files/download/{filename}")
 async def download_file(filename: str):
     """Download a file from the data directory.
@@ -126,15 +109,12 @@ async def download_file(filename: str):
     Raises:
         HTTPException: If file not found or access denied
     """
-    # Security: only allow alphanumeric, dots, hyphens, and underscores
-    import re
 
     if not re.match(r"^[a-zA-Z0-9._-]+$", filename):
         raise HTTPException(status_code=400, detail="Invalid filename")
 
     file_path = Path("data") / filename
 
-    # Security: ensure file is within data directory (prevent path traversal)
     try:
         file_path = file_path.resolve()
         data_dir = Path("data").resolve()
@@ -142,7 +122,6 @@ async def download_file(filename: str):
     except ValueError:
         raise HTTPException(status_code=403, detail="Access denied") from None
 
-    # Check if file exists
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
@@ -152,27 +131,22 @@ async def download_file(filename: str):
     )
 
 
-# Static files serving (if files directory exists)
 static_path = Path("files")
 if static_path.exists() and static_path.is_dir():
     app.mount("/files", StaticFiles(directory="files"), name="files")
     logger.info("Static files mounted at /files")
 
 
-# Frontend static files serving
 frontend_dist_path = Path("frontend/dist")
 if frontend_dist_path.exists() and frontend_dist_path.is_dir():
-    # Mount static assets (JS, CSS, images)
     app.mount(
         "/assets", StaticFiles(directory=frontend_dist_path / "assets"), name="assets"
     )
     logger.info("Frontend assets mounted at /assets")
 
-    # Serve index.html for SPA routing
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """Serve the SPA for all non-API routes."""
-        # Don't serve SPA for API routes
         if (
             full_path.startswith("api/")
             or full_path.startswith("docs")
@@ -181,12 +155,10 @@ if frontend_dist_path.exists() and frontend_dist_path.is_dir():
         ):
             raise HTTPException(status_code=404, detail="Not found")
 
-        # Serve static files if they exist
         file_path = frontend_dist_path / full_path
         if file_path.exists() and file_path.is_file():
             return FileResponse(file_path)
 
-        # Serve index.html for SPA routing
         index_file = frontend_dist_path / "index.html"
         if index_file.exists():
             return FileResponse(index_file)

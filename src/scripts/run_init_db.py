@@ -14,7 +14,6 @@ from sqlmodel import SQLModel, create_engine
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from src.config import settings
-from src.history import QueryHistory, SourceDocumentHistory  # noqa: F401
 
 # Configure logging
 logging.basicConfig(
@@ -102,7 +101,6 @@ def prompt_user_action(table_status: dict[str, bool]) -> str:
                 return action_map[response]
             print("Invalid choice. Please enter 'c', 'r', or 'a'.")
 
-    # This should never be reached, but just in case
     return "abort"
 
 
@@ -116,20 +114,16 @@ def confirm_destructive_action() -> bool:
 def init_database():
     """Initialize database tables with user prompts for safety."""
     try:
-        # Create engine
         logger.info("Connecting to database...")
         engine = create_engine(settings.database_url, echo=False)
 
-        # Test connection
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         logger.info("Database connection successful")
 
-        # Check existing table status
         table_status = check_tables_exist(engine)
         logger.info(f"Table status: {table_status}")
 
-        # Determine action based on user input
         action = prompt_user_action(table_status)
 
         if action == "abort":
@@ -156,11 +150,9 @@ def init_database():
             SQLModel.metadata.create_all(engine)
             logger.info("✅ Missing tables created successfully")
 
-        # Verify table creation
         final_status = check_tables_exist(engine)
         logger.info(f"Final table status: {final_status}")
 
-        # Log table information
         for table_name, exists in final_status.items():
             if exists:
                 info = get_table_info(engine, table_name)

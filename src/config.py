@@ -11,7 +11,6 @@ BASE_DIR = Path(__file__).parent.parent
 class Settings(BaseSettings):
     """Application configuration loaded from environment variables."""
 
-    # Database Configuration
     PG_HOST: str = Field(default="localhost", description="PostgreSQL host address")
     PG_PORT: int = Field(default=5432, description="PostgreSQL port number")
     PG_USER: str = Field(description="PostgreSQL username")
@@ -27,7 +26,6 @@ class Settings(BaseSettings):
         description="Dimension of the embedding vectors (auto-detected from model)",
     )
 
-    # Ollama Configuration
     OLLAMA_BASE_URL: str = Field(
         default="http://localhost:11434", description="Base URL for Ollama API"
     )
@@ -38,7 +36,6 @@ class Settings(BaseSettings):
         default="embeddinggemma", description="Name of the embedding model to use"
     )
 
-    # Application Configuration
     DATA_FOLDER: Path = BASE_DIR / "data"
 
     @property
@@ -62,5 +59,4 @@ class Settings(BaseSettings):
         return v
 
 
-# Global settings instance
 settings = Settings()  # type: ignore

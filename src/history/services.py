@@ -34,7 +34,6 @@ class HistoryService:
     ) -> None | UUID:
         """Save a query and its response to the history."""
         try:
-            # Save query history
             query_history = self.repository.create_query_history(
                 query=query_request.query,
                 chat_response=query_response.chat_response,
@@ -46,7 +45,6 @@ class HistoryService:
             )
             if not query_history or not query_history.id:
                 return None
-            # Save source documents
             for doc in query_response.source_documents:
                 self.repository.create_source_document_history(
                     query_id=query_history.id,

@@ -244,7 +244,6 @@ class HistoryRepository:
                                 f"Failed to parse metadata for document {item.id}: {e}\n{item.document_metadata}"
                             )
 
-                    # Create response with parsed metadata
                     response = SourceDocumentHistoryResponse(
                         id=item.id,
                         content_preview=item.content_preview,
