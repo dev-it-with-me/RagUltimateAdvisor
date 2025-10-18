@@ -57,7 +57,6 @@ class RAGRepository:
                 settings.EMBEDDING_MODEL,
             )
 
-            # Detect actual embedding dimension - this is critical for vector store setup
             try:
                 test_vector = Settings.embed_model.get_text_embedding("__dim_probe__")
                 self._actual_embed_dim = len(test_vector)
