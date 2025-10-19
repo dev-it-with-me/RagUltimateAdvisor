@@ -176,7 +176,7 @@ pnpm run dev
 
 This project is featured in a YouTube tutorial covering RAG development: [YouTube Tutorial](https://www.youtube.com/watch?v=TqeOznAcXXU)
 
-[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/TqeOznAcXXU/0.jpg)](https://youtu.be/TqeOznAcXXU)
+[![https://www.youtube.com/@DevItWithMe](https://img.youtube.com/vi/TqeOznAcXXU/0.jpg)](https://youtu.be/TqeOznAcXXU)
 
 **🔔 Subscribe to [@DevItWithMe](https://www.youtube.com/@DevItWithMe) for more!**
 
