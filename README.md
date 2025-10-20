@@ -182,6 +182,10 @@ This project is featured in a YouTube tutorial covering RAG development: [YouTub
 
 ---
 
+## 🤝 Support & Contribution
+
+**🙏 If you find this project helpful, consider [Buying Me a Coffee](https://buymeacoffee.com/dev.it)**
+
 **⭐ Star this repository if it helps you learn RAG development!**
 
 **🐛 Found a bug? [Open an issue](https://github.com/dev-it-with-me/RagUltimateAdvisor/issues)**
