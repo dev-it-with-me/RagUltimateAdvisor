@@ -14,8 +14,8 @@ from llama_index.core import (
     VectorStoreIndex,
 )
 from llama_index.core.node_parser import SentenceSplitter
-from llama_index.embeddings.ollama import OllamaEmbedding
-from llama_index.llms.ollama import Ollama
+from llama_index.embeddings.voyageai import VoyageEmbedding
+from llama_index.llms.anthropic import Anthropic
 from llama_index.vector_stores.postgres import PGVectorStore
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -42,19 +42,20 @@ class RAGRepository:
     def _setup_models(self) -> None:
         """Setup the LLM and embedding models and validate embedding dimension."""
         try:
-            Settings.llm = Ollama(
-                model=settings.CHAT_MODEL,
-                base_url=settings.OLLAMA_BASE_URL,
-                request_timeout=120.0,
+            Settings.llm = Anthropic(
+                model=settings.ANTHROPIC_MODEL,
+                api_key=settings.ANTHROPIC_API_KEY,
+                max_tokens=4096,
             )
-            Settings.embed_model = OllamaEmbedding(
-                model_name=settings.EMBEDDING_MODEL,
-                base_url=settings.OLLAMA_BASE_URL,
+            Settings.embed_model = VoyageEmbedding(
+                model_name=settings.VOYAGE_MODEL,
+                voyage_api_key=settings.VOYAGE_API_KEY,
+                truncation=True,
             )
             logger.info(
-                "Models configured: LLM=%s, Embedding=%s",
-                settings.CHAT_MODEL,
-                settings.EMBEDDING_MODEL,
+                "Models configured: LLM=%s (Anthropic), Embedding=%s (VoyageAI)",
+                settings.ANTHROPIC_MODEL,
+                settings.VOYAGE_MODEL,
             )
 
             try:

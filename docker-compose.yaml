@@ -13,35 +13,6 @@ services:
     networks:
       - app-network
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama-server
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-      - APP_CHAT_MODEL=${APP_CHAT_MODEL}
-      - APP_EMBEDDING_MODEL=${APP_EMBEDDING_MODEL}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    entrypoint: []
-    command:
-      [
-        "sh",
-        "-c",
-        "ollama serve & sleep 5 && (ollama pull ${APP_CHAT_MODEL} || echo 'Failed to pull chat model') && (ollama pull ${APP_EMBEDDING_MODEL} || echo 'Failed to pull embedding model') && wait",
-      ]
-    restart: no
-    networks:
-      - app-network
-
   backend:
     build:
       context: .
@@ -55,12 +26,12 @@ services:
       - APP_PG_USER=${APP_PG_USER}
       - APP_PG_PASSWORD=${APP_PG_PASSWORD}
       - APP_PG_DATABASE=${APP_PG_DATABASE}
-      - APP_OLLAMA_BASE_URL=http://ollama:11434
-      - APP_CHAT_MODEL=${APP_CHAT_MODEL}
-      - APP_EMBEDDING_MODEL=${APP_EMBEDDING_MODEL}
+      - APP_ANTHROPIC_API_KEY=${APP_ANTHROPIC_API_KEY}
+      - APP_ANTHROPIC_MODEL=${APP_ANTHROPIC_MODEL}
+      - APP_VOYAGE_API_KEY=${APP_VOYAGE_API_KEY}
+      - APP_VOYAGE_MODEL=${APP_VOYAGE_MODEL}
     depends_on:
       - db
-      - ollama
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -70,7 +41,6 @@ services:
 
 volumes:
   postgres_data:
-  ollama_data:
 
 networks:
   app-network:

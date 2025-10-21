@@ -21,7 +21,8 @@ This repository serves as a **comprehensive tutorial project** for YouTube viewe
 - **SQLModel**: Modern Python SQL toolkit combining SQLAlchemy + Pydantic
 - **LlamaIndex**: RAG framework for document processing and querying
 - **PostgreSQL + pgvector**: Vector database for embeddings storage
-- **Ollama**: Local LLM serving (supports Llama 3.2, Mistral, etc.)
+- **Anthropic Claude**: State-of-the-art LLM (claude-sonnet-4-0) for generation
+- **VoyageAI**: High-quality embeddings (voyage-3.5) with 200M free tokens
 
 ### **Frontend (TypeScript/React)**
 - **React 19**: Modern React with latest features
@@ -40,8 +41,8 @@ This repository serves as a **comprehensive tutorial project** for YouTube viewe
 ### Prerequisites
 
 - **Docker & Docker Compose** (required)
-- **8GB+ RAM** (for running local LLMs)
-- **NVIDIA GPU** (optional, for faster inference)
+- **Anthropic API Key** (get from https://console.anthropic.com/)
+- **VoyageAI API Key** (get from https://www.voyageai.com/ - includes 200M free tokens)
 - **Git** (for cloning the repository)
 
 ### 1. Clone and Setup
@@ -52,12 +53,12 @@ git clone https://github.com/yourusername/UltimateAdvisor.git
 cd UltimateAdvisor
 
 # Copy environment template
-cp .env.example .env.local
+cp .env.example .env
 ```
 
 ### 2. Configure Environment Variables
 
-Edit `.env.local` with your preferred settings:
+Edit `.env` with your API keys:
 
 ```bash
 # Database Configuration
@@ -66,28 +67,32 @@ APP_PG_PASSWORD=your_secure_password
 APP_PG_DATABASE=ultimate_advisor
 APP_PG_PORT=5432
 
-# Ollama Models (you can change these)
-APP_CHAT_MODEL=llama3.2:3b
-APP_EMBEDDING_MODEL=nomic-embed-text:latest
+# Anthropic Configuration
+APP_ANTHROPIC_API_KEY=sk-ant-api03-YOUR-KEY-HERE
+APP_ANTHROPIC_MODEL=claude-sonnet-4-0
+
+# VoyageAI Configuration (200M tokens FREE)
+APP_VOYAGE_API_KEY=pa-YOUR-KEY-HERE
+APP_VOYAGE_MODEL=voyage-3.5
 ```
 
 ### 3. Start All Services
 
 ```bash
-# Start all services (this will download models automatically)
+# Start database and backend services
 docker-compose up -d
 
-# Monitor the logs to see when everything is ready
-docker-compose logs -f
+# Monitor the logs
+docker-compose logs -f backend
 ```
 
-**Note**: First startup takes 5-10 minutes as it downloads the LLM models.
+**Note**: First startup takes 1-2 minutes to download PostgreSQL image.
 
 ### 4. Load the Ultimate Frisbee Rules
 
 ```bash
 # Index the WFDF Ultimate Frisbee Rules document
-uv run ./src/scripts/run_load_embeddings.py
+docker exec ultimate-advisor-backend uv run python src/scripts/run_load_embeddings.py
 ```
 
 ### 5. Access the Application
@@ -108,7 +113,7 @@ Try asking these questions in the chat interface:
 
 ### Data Flow
 
-1. **Document Processing**: PDF documents are chunked and embedded using Ollama
+1. **Document Processing**: PDF documents are chunked and embedded using VoyageAI
 2. **Vector Storage**: Embeddings are stored in PostgreSQL with pgvector extension
 3. **Query Processing**: User questions are embedded and matched against stored vectors
 4. **Response Generation**: Retrieved context is sent to the chat model for answer generation
@@ -140,15 +145,10 @@ docker run -d \
   pgvector/pgvector:pg17
 ```
 
-3. **Start Ollama:**
-```bash
-# Install Ollama (see https://ollama.ai)
-ollama serve
-
-# Pull required models
-ollama pull gemma3:4b
-ollama pull embeddinggemma:latest
-```
+3. **Set up API keys:**
+   - Get Anthropic API key from https://console.anthropic.com/
+   - Get VoyageAI API key from https://www.voyageai.com/
+   - Add them to your `.env` file
 
 4. **Initialize the database:**
 ```bash

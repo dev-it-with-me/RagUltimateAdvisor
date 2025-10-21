@@ -1,0 +1,56 @@
+Pricing
+Voyage model pricing is usage-based, with charges billed to the account linked to the API key used for access.
+
+Text Embeddings
+We charge for requests to the Voyage text embedding endpoint based on the number of tokens in the documents/queries. The first 200 million tokens for voyage-3-large, voyage-3.5, voyage-3.5-lite, voyage-context-3, and voyage-code-3, or the first 50 million tokens for voyage-multilingual-2, voyage-finance-2, voyage-law-2, and voyage-code-2, are free for every account. Subsequent usage is priced per token, as shown in the following table.
+
+Model	Price per thousand tokens	Price per million tokens	Number of free tokens
+voyage-3-large	$0.00018	$0.18	200 million
+voyage-context-3	$0.00018	$0.18	200 million
+voyage-3.5	$0.00006	$0.06	200 million
+voyage-3.5-lite	$0.00002	$0.02	200 million
+voyage-code-3	$0.00018	$0.18	200 million
+voyage-finance-2
+voyage-law-2
+voyage-code-2	$0.00012	$0.12	50 million
+Multimodal Embeddings
+We charge for requests to the Voyage multimodal endpoint based on the number of tokens in the text and the number of pixels in images. The first 200M text tokens and 150B pixels for voyage-multimodal-3 are free for every account. Subsequent usage is priced per token and per pixel, as shown in the following table.
+
+Model	Price per million tokens	Price per billion pixels	Number of free tokens and pixels
+voyage-multimodal-3	$0.12	$0.60	200M text tokens and 150B pixels
+An image with fewer than 50,000 pixels will be upscaled, processed, and charged as a 50,000-pixel image. Images containing over 2 million pixels will be downsampled and charged as 2 million-pixel images. Therefore, the minimum and maximum costs per image are $0.00003 and $0.0012, respectively. The following table provides examples of image pricing.
+
+Image resolution	Number of pixels	Price per image	Price per thousand images
+200px x 200px	40,000	$0.00003	$0.03
+1000px x 1000px	1 million	$0.0006	$0.60
+2000px x 2000px	4 million	$0.0012	$1.20
+4000px x 4000px	16 million	$0.0012	$1.20
+For example, the cost to vectorize a single input with 1000 text tokens ($0.00012) and two 4 million-pixel images (2 x $0.0012) would be $0.00252.
+
+Rerankers
+Pricing for the Voyage reranker endpoint is based on the total number of processed tokens, calculated as “(the number of query tokens × the number of documents) + sum of the number of tokens in all documents.” The first 200 million tokens for rerank-2.5, rerank-2.5-lite, rerank-2, and rerank-2-lite are free for each account. Subsequent usage is priced per token, as shown in the following table.
+
+Model	Price per thousand tokens	Price per million tokens	Estimated price per request*	Number of free tokens
+rerank-2.5	$0.00005	$0.05	$0.0025	200 million
+rerank-2.5-lite	$0.00002	$0.02	$0.001	200 million
+* This price estimate assumes each request includes 100 documents and that the sum of the number of tokens in the query and the number of tokens in each document is 500.
+
+Older models
+The following table shows the pricing for older models. Please note that we do not offer free tokens for them.
+
+Model	Price per thousand tokens	Price per million tokens	Number of free tokens
+voyage-multilingual-2
+voyage-large-2-instruct
+voyage-large-2	$0.00012	$0.12	0
+voyage-01
+voyage-lite-01
+voyage-lite-01-instruct
+voyage-02
+voyage-lite-02-instruct
+voyage-2	$0.0001	$0.1	0
+voyage-3	$0.00006	$0.06	0
+rerank-1
+rerank-2	$0.00005	$0.05	0
+voyage-3-lite
+rerank-lite-1
+rerank-2-lite	$0.00002	$0.02	0

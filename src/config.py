@@ -22,18 +22,22 @@ class Settings(BaseSettings):
         default="documents", description="Name of the table to store document vectors"
     )
     EMBED_DIM: int = Field(
-        default=768,
-        description="Dimension of the embedding vectors (auto-detected from model)",
+        default=1024,
+        description="Dimension of the embedding vectors (VoyageAI: 1024)",
     )
 
-    OLLAMA_BASE_URL: str = Field(
-        default="http://localhost:11434", description="Base URL for Ollama API"
+    # Anthropic Configuration
+    ANTHROPIC_API_KEY: str = Field(description="Anthropic API key")
+    ANTHROPIC_MODEL: str = Field(
+        default="claude-sonnet-4-0",
+        description="Anthropic model to use for chat/generation",
     )
-    CHAT_MODEL: str = Field(
-        default="gemma3:4b", description="Name of the chat model to use"
-    )
-    EMBEDDING_MODEL: str = Field(
-        default="embeddinggemma", description="Name of the embedding model to use"
+
+    # VoyageAI Configuration
+    VOYAGE_API_KEY: str = Field(description="VoyageAI API key for embeddings")
+    VOYAGE_MODEL: str = Field(
+        default="voyage-3.5",
+        description="VoyageAI embedding model (voyage-3.5 recommended for cost)",
     )
 
     DATA_FOLDER: Path = BASE_DIR / "data"
