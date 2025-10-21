@@ -27,7 +27,9 @@ class HistoryRepository:
     """Repository for query history database operations."""
 
     def __init__(self):
-        self.engine = create_engine(settings.database_url)
+        self.engine = create_engine(
+            settings.history_database_url, connect_args={"check_same_thread": False}
+        )
 
     @staticmethod
     def _parse_document_metadata(

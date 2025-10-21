@@ -6,19 +6,17 @@ including vector storage, document indexing, and query operations.
 
 import logging
 import traceback
-from contextlib import suppress
 
+import chromadb
 from llama_index.core import (
     Settings,
     StorageContext,
     VectorStoreIndex,
 )
 from llama_index.core.node_parser import SentenceSplitter
-from llama_index.embeddings.ollama import OllamaEmbedding
-from llama_index.llms.ollama import Ollama
-from llama_index.vector_stores.postgres import PGVectorStore
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
+from llama_index.embeddings.voyageai import VoyageEmbedding
+from llama_index.llms.anthropic import Anthropic
+from llama_index.vector_stores.chroma import ChromaVectorStore
 
 from src.config import settings
 from src.schemas import DocumentMetadata, QueryRequest, QueryResponse, SourceDocument
@@ -30,31 +28,33 @@ class RAGRepository:
     """Repository class for RAG database operations."""
 
     def __init__(self) -> None:
-        """Initialize the RAG repository with database connection and models."""
-        self.engine: None | Engine = None
-        self.vector_store: None | PGVectorStore = None
-        self.storage_context: None | StorageContext = None
-        self.index: None | VectorStoreIndex = None
+        """Initialize the RAG repository with ChromaDB and models."""
+        self.chroma_client: chromadb.PersistentClient | None = None
+        self.chroma_collection: chromadb.Collection | None = None
+        self.vector_store: ChromaVectorStore | None = None
+        self.storage_context: StorageContext | None = None
+        self.index: VectorStoreIndex | None = None
         self._actual_embed_dim: int | None = None
         self._setup_models()
-        self._setup_database()
+        self._setup_vector_store()
 
     def _setup_models(self) -> None:
         """Setup the LLM and embedding models and validate embedding dimension."""
         try:
-            Settings.llm = Ollama(
-                model=settings.CHAT_MODEL,
-                base_url=settings.OLLAMA_BASE_URL,
-                request_timeout=120.0,
+            Settings.llm = Anthropic(
+                model=settings.ANTHROPIC_MODEL,
+                api_key=settings.ANTHROPIC_API_KEY,
+                max_tokens=4096,
             )
-            Settings.embed_model = OllamaEmbedding(
-                model_name=settings.EMBEDDING_MODEL,
-                base_url=settings.OLLAMA_BASE_URL,
+            Settings.embed_model = VoyageEmbedding(
+                model_name=settings.VOYAGE_MODEL,
+                voyage_api_key=settings.VOYAGE_API_KEY,
+                truncation=True,
             )
             logger.info(
-                "Models configured: LLM=%s, Embedding=%s",
-                settings.CHAT_MODEL,
-                settings.EMBEDDING_MODEL,
+                "Models configured: LLM=%s (Anthropic), Embedding=%s (VoyageAI)",
+                settings.ANTHROPIC_MODEL,
+                settings.VOYAGE_MODEL,
             )
 
             try:
@@ -82,42 +82,31 @@ class RAGRepository:
             logger.error("Failed to setup models: %s", e)
             raise
 
-    def _setup_database(self) -> None:
-        """Setup the database connection, extension and vector store."""
+    def _setup_vector_store(self) -> None:
+        """Setup ChromaDB persistent client and vector store."""
         try:
-            self.engine = create_engine(settings.database_url, echo=False)
-            if self.engine:
-                with self.engine.connect() as conn:
-                    conn.execute(text("SELECT 1"))
-                    logger.info("Database connection established")
-                    with suppress(Exception):
-                        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-                        conn.commit()
-                        logger.info("pgvector extension ensured")
+            # Create ChromaDB persistent client
+            persist_dir = str(settings.CHROMA_PERSIST_DIRECTORY)
+            self.chroma_client = chromadb.PersistentClient(path=persist_dir)
+            logger.info(f"ChromaDB client initialized at: {persist_dir}")
 
-            embed_dim = self._actual_embed_dim or settings.EMBED_DIM
-            if self._actual_embed_dim is None:
-                logger.warning(
-                    "Using configured EMBED_DIM=%s (model dimension probe failed earlier)",
-                    settings.EMBED_DIM,
-                )
-
-            self.vector_store = PGVectorStore.from_params(
-                database=settings.PG_DATABASE,
-                host=settings.PG_HOST,
-                password=settings.PG_PASSWORD,
-                port=str(settings.PG_PORT),
-                user=settings.PG_USER,
-                table_name=settings.VECTOR_TABLE_NAME,
-                embed_dim=embed_dim,
+            # Get or create collection with cosine similarity
+            self.chroma_collection = self.chroma_client.get_or_create_collection(
+                name=settings.CHROMA_COLLECTION_NAME,
+                metadata={"hnsw:space": "cosine"},
             )
             logger.info(
-                "Vector store configured with table '%s' (embed_dim=%s)",
-                settings.VECTOR_TABLE_NAME,
-                embed_dim,
+                f"ChromaDB collection '{settings.CHROMA_COLLECTION_NAME}' ready"
             )
+
+            # Create LlamaIndex ChromaVectorStore wrapper
+            self.vector_store = ChromaVectorStore(
+                chroma_collection=self.chroma_collection
+            )
+            logger.info("ChromaVectorStore initialized successfully")
+
         except Exception as e:
-            logger.error("Failed to setup database: %s", e)
+            logger.error(f"Failed to setup ChromaDB vector store: {e}")
             raise
 
     def index_documents(self, documents: list) -> bool:
@@ -268,35 +257,17 @@ class RAGRepository:
         Returns:
             int: Number of documents
         """
-        if not self.engine:
-            logger.warning("get_document_count called before engine initialization")
+        if not self.chroma_collection:
+            logger.warning(
+                "get_document_count called before ChromaDB collection initialization"
+            )
             return 0
         try:
-            with self.engine.connect() as conn:
-                exists_result = conn.execute(
-                    text(
-                        "SELECT 1 FROM information_schema.tables WHERE table_name = :tbl"
-                    ),
-                    {"tbl": f"data_{settings.VECTOR_TABLE_NAME}"},
-                ).fetchone()
-                if not exists_result:
-                    logger.info(
-                        "Vector table '%s' not found (no rows to count yet)",
-                        settings.VECTOR_TABLE_NAME,
-                    )
-                    return 0
-                result = conn.execute(
-                    text(f"SELECT COUNT(*) FROM data_{settings.VECTOR_TABLE_NAME}")
-                )
-                row = result.fetchone()
-                count = int(row[0]) if row and row[0] is not None else 0
-                return count
+            count = self.chroma_collection.count()
+            logger.debug(f"ChromaDB collection contains {count} documents")
+            return count
         except Exception as e:
-            logger.error(
-                "Failed to get document count from table '%s': %s",
-                settings.VECTOR_TABLE_NAME,
-                e,
-            )
+            logger.error(f"Failed to get document count from ChromaDB: {e}")
             return 0
 
     def clear_index(self) -> bool:
@@ -306,16 +277,26 @@ class RAGRepository:
             bool: True if clearing was successful
         """
         try:
-            if not self.vector_store or not self.engine:
+            if not self.chroma_client or not self.chroma_collection:
+                logger.error("ChromaDB not initialized")
                 return False
 
-            with self.engine.connect() as conn:
-                conn.execute(
-                    text(f"DROP TABLE IF EXISTS data_{settings.VECTOR_TABLE_NAME}")
-                )
-                conn.commit()
+            # Delete the collection
+            collection_name = settings.CHROMA_COLLECTION_NAME
+            self.chroma_client.delete_collection(name=collection_name)
+            logger.info(f"Deleted ChromaDB collection '{collection_name}'")
 
-            self._setup_database()
+            # Recreate the collection
+            self.chroma_collection = self.chroma_client.create_collection(
+                name=collection_name,
+                metadata={"hnsw:space": "cosine"},
+            )
+            logger.info(f"Recreated ChromaDB collection '{collection_name}'")
+
+            # Recreate vector store wrapper
+            self.vector_store = ChromaVectorStore(
+                chroma_collection=self.chroma_collection
+            )
             self.index = None
 
             logger.info("Index cleared successfully")
@@ -323,28 +304,6 @@ class RAGRepository:
 
         except Exception as e:
             logger.error(f"Failed to clear index: {e}")
-            return False
-
-    def force_recreate_index(self) -> bool:
-        """Force drop and recreate the vector table (dimension mismatch recovery)."""
-        if not self.engine:
-            logger.error("Cannot recreate index: engine not initialized")
-            return False
-        try:
-            with self.engine.connect() as conn:
-                conn.execute(
-                    text(f"DROP TABLE IF EXISTS data_{settings.VECTOR_TABLE_NAME}")
-                )
-                conn.commit()
-            logger.info(
-                "Dropped existing vector table '%s'", settings.VECTOR_TABLE_NAME
-            )
-            self.vector_store = None
-            self.index = None
-            self._setup_database()
-            return True
-        except Exception as e:
-            logger.error("Failed to force recreate index: %s", e)
             return False
 
     def health_check(self, require_index: bool = False) -> dict:
@@ -357,24 +316,34 @@ class RAGRepository:
             dict: Health check results
         """
         health = {
-            "database": False,
+            "chroma_client": False,
+            "chroma_collection": False,
             "vector_store": False,
             "models": False,
             "index": False,
         }
 
         try:
-            if self.engine:
-                with self.engine.connect() as conn:
-                    conn.execute(text("SELECT 1"))
-                health["database"] = True
+            # Check ChromaDB client
+            if self.chroma_client:
+                try:
+                    self.chroma_client.heartbeat()
+                    health["chroma_client"] = True
+                except Exception:
+                    pass
 
+            # Check ChromaDB collection
+            health["chroma_collection"] = self.chroma_collection is not None
+
+            # Check vector store wrapper
             health["vector_store"] = self.vector_store is not None
 
+            # Check models
             health["models"] = (
                 Settings.llm is not None and Settings.embed_model is not None
             )
 
+            # Check index
             if require_index:
                 health["index"] = self.index is not None
             else:

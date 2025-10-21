@@ -114,12 +114,16 @@ def confirm_destructive_action() -> bool:
 def init_database():
     """Initialize database tables with user prompts for safety."""
     try:
-        logger.info("Connecting to database...")
-        engine = create_engine(settings.database_url, echo=False)
+        logger.info("Connecting to SQLite database...")
+        engine = create_engine(
+            settings.history_database_url,
+            connect_args={"check_same_thread": False},
+            echo=False,
+        )
 
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        logger.info("Database connection successful")
+        logger.info("SQLite database connection successful")
 
         table_status = check_tables_exist(engine)
         logger.info(f"Table status: {table_status}")
@@ -166,7 +170,8 @@ def init_database():
 if __name__ == "__main__":
     print("Ultimate Advisor Database Initialization")
     print("=" * 50)
-    print(f"Database URL: {settings.database_url}")
+    print(f"SQLite Database: {settings.HISTORY_DB_PATH}")
+    print(f"Database URL: {settings.history_database_url}")
     print()
 
     init_database()
