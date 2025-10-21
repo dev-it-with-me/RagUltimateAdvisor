@@ -11,16 +11,23 @@ BASE_DIR = Path(__file__).parent.parent
 class Settings(BaseSettings):
     """Application configuration loaded from environment variables."""
 
-    PG_HOST: str = Field(default="localhost", description="PostgreSQL host address")
-    PG_PORT: int = Field(default=5432, description="PostgreSQL port number")
-    PG_USER: str = Field(description="PostgreSQL username")
-    PG_PASSWORD: str = Field(description="PostgreSQL user password")
-    PG_DATABASE: str = Field(description="PostgreSQL database name")
-
-    # Vector Store Configuration
-    VECTOR_TABLE_NAME: str = Field(
-        default="documents", description="Name of the table to store document vectors"
+    # ChromaDB Configuration (Vector Store)
+    CHROMA_PERSIST_DIRECTORY: Path = Field(
+        default=BASE_DIR / "storage" / "vectors" / "chroma",
+        description="Directory for ChromaDB persistent storage",
     )
+    CHROMA_COLLECTION_NAME: str = Field(
+        default="ultimate_advisor_docs",
+        description="Name of the ChromaDB collection for document vectors",
+    )
+
+    # SQLite Configuration (Query History)
+    HISTORY_DB_PATH: Path = Field(
+        default=BASE_DIR / "storage" / "database" / "ultimate_advisor.db",
+        description="Path to SQLite database for query history",
+    )
+
+    # Embedding Configuration
     EMBED_DIM: int = Field(
         default=1024,
         description="Dimension of the embedding vectors (VoyageAI: 1024)",
@@ -43,9 +50,9 @@ class Settings(BaseSettings):
     DATA_FOLDER: Path = BASE_DIR / "data"
 
     @property
-    def database_url(self) -> str:
-        """Construct PostgreSQL database URL."""
-        return f"postgresql://{self.PG_USER}:{self.PG_PASSWORD}@{self.PG_HOST}:{self.PG_PORT}/{self.PG_DATABASE}"
+    def history_database_url(self) -> str:
+        """Construct SQLite database URL for query history."""
+        return f"sqlite:///{self.HISTORY_DB_PATH}"
 
     model_config = SettingsConfigDict(
         env_prefix="APP_",
@@ -54,9 +61,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    @field_validator("DATA_FOLDER")
+    @field_validator("DATA_FOLDER", "CHROMA_PERSIST_DIRECTORY")
     def validate_directories(cls, v):
-        """Ensure that DATA_FOLDER is a valid Path object."""
+        """Ensure that directories are valid Path objects and exist."""
         if not isinstance(v, Path):
             v = Path(v)
         v.mkdir(parents=True, exist_ok=True)

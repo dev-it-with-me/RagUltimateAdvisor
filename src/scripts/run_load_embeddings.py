@@ -20,7 +20,7 @@ from src.rag import RAGService
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("load_embeddings.log"), logging.StreamHandler()],
+    handlers=[logging.FileHandler("logs/load_embeddings.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
