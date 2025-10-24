@@ -52,12 +52,12 @@ git clone https://github.com/yourusername/UltimateAdvisor.git
 cd UltimateAdvisor
 
 # Copy environment template
-cp .env.example .env.local
+cp .env.example .env
 ```
 
 ### 2. Configure Environment Variables
 
-Edit `.env.local` with your preferred settings:
+Edit `.env` with your preferred settings:
 
 ```bash
 # Database Configuration
