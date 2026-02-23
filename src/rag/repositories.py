@@ -13,7 +13,7 @@ from llama_index.core import (
     StorageContext,
     VectorStoreIndex,
 )
-from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.node_parser import MarkdownNodeParser, SentenceSplitter
 from llama_index.core.schema import Document
 from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.llms.ollama import Ollama
@@ -124,8 +124,8 @@ class RAGRepository:
     def index_documents(self, documents: list) -> bool:
         """Index documents into the vector store.
 
-        Optimized for small document collections (single document with ~17 pages).
-        Uses smaller chunk sizes and reduced overlap for better granularity.
+        Uses MarkdownNodeParser to respect document structure (headers),
+        then SentenceSplitter for further chunking of large sections.
         """
         try:
             logger.info("Creating index from documents...")
@@ -149,25 +149,53 @@ class RAGRepository:
 
             logger.info(f"Sanitized {len(sanitized_documents)} documents")
 
-            text_splitter = SentenceSplitter(
-                chunk_size=256,
-                chunk_overlap=20,
-                separator=".\n",
-                paragraph_separator="\n\n\n",
+            # Step 1: Parse markdown by headers to respect document structure
+            markdown_parser = MarkdownNodeParser(
+                include_metadata=True,
+                include_prev_next_rel=True
             )
 
-            Settings.text_splitter = text_splitter
+            # Step 2: Setup text splitter for large sections
+            text_splitter = SentenceSplitter(
+                chunk_size=1000,
+                chunk_overlap=200,
+                separator=" "
+            )
+
+            logger.info("Parsing documents with MarkdownNodeParser...")
+            initial_nodes = markdown_parser.get_nodes_from_documents(sanitized_documents)
+            logger.info(f"Created {len(initial_nodes)} initial nodes from markdown structure")
+
+            # Step 3: Further chunk large nodes
+            final_nodes = []
+            for node in initial_nodes:
+                if len(node.text) > 1000:
+                    # Convert node back to document for splitting
+                    temp_doc = Document(
+                        text=node.text,
+                        metadata=node.metadata,
+                        id_=node.id_
+                    )
+                    sub_nodes = text_splitter.get_nodes_from_documents([temp_doc])
+                    # Preserve original metadata in sub-nodes
+                    for sub_node in sub_nodes:
+                        sub_node.metadata.update(node.metadata)
+                    final_nodes.extend(sub_nodes)
+                else:
+                    final_nodes.append(node)
+
+            logger.info(f"Final node count after chunking: {len(final_nodes)}")
 
             self.storage_context = StorageContext.from_defaults(
                 vector_store=self.vector_store
             )
 
-            self.index = VectorStoreIndex.from_documents(
-                sanitized_documents,
+            # Create index from nodes instead of documents
+            self.index = VectorStoreIndex(
+                nodes=final_nodes,
                 storage_context=self.storage_context,
                 embed_model=Settings.embed_model,
-                show_progress=True,
-                transformations=[text_splitter],
+                show_progress=True
             )
 
             if self.index:
@@ -230,7 +258,9 @@ class RAGRepository:
 
             query_engine = self.index.as_query_engine(
                 similarity_top_k=optimized_top_k,
+                # TODO: Manage this
                 response_mode="tree_summarize",
+                # response_mode="accumulate",
                 similarity_cutoff=0.6,
             )
             response = query_engine.query(query_request.query)
