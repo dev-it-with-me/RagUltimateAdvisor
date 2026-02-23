@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     """Application configuration loaded from environment variables."""
 
     PG_HOST: str = Field(default="localhost", description="PostgreSQL host address")
-    PG_PORT: int = Field(default=5432, description="PostgreSQL port number")
+    PG_PORT: int = Field(default=5433, description="PostgreSQL port number")
     PG_USER: str = Field(description="PostgreSQL username")
     PG_PASSWORD: str = Field(description="PostgreSQL user password")
     PG_DATABASE: str = Field(description="PostgreSQL database name")
@@ -30,7 +30,7 @@ class Settings(BaseSettings):
         default="http://localhost:11434", description="Base URL for Ollama API"
     )
     CHAT_MODEL: str = Field(
-        default="gemma3:4b", description="Name of the chat model to use"
+        default="gemma3:12b", description="Name of the chat model to use"
     )
     EMBEDDING_MODEL: str = Field(
         default="embeddinggemma", description="Name of the embedding model to use"

@@ -14,6 +14,7 @@ from llama_index.core import (
     VectorStoreIndex,
 )
 from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.schema import Document
 from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.llms.ollama import Ollama
 from llama_index.vector_stores.postgres import PGVectorStore
@@ -130,6 +131,24 @@ class RAGRepository:
             logger.info("Creating index from documents...")
             logger.info(f"Number of documents to index: {len(documents)}")
 
+            # Sanitize document text to remove NUL characters that PostgreSQL cannot handle
+            sanitized_documents = []
+            for doc in documents:
+                if hasattr(doc, 'text') and doc.text:
+                    # Remove NUL bytes (0x00) from the text
+                    sanitized_text = doc.text.replace('\x00', '')
+                    # Create a new document with sanitized text
+                    sanitized_doc = Document(
+                        text=sanitized_text,
+                        metadata=doc.metadata if hasattr(doc, 'metadata') else {},
+                        id_=doc.id_ if hasattr(doc, 'id_') else None,
+                    )
+                    sanitized_documents.append(sanitized_doc)
+                else:
+                    sanitized_documents.append(doc)
+
+            logger.info(f"Sanitized {len(sanitized_documents)} documents")
+
             text_splitter = SentenceSplitter(
                 chunk_size=256,
                 chunk_overlap=20,
@@ -144,7 +163,7 @@ class RAGRepository:
             )
 
             self.index = VectorStoreIndex.from_documents(
-                documents,
+                sanitized_documents,
                 storage_context=self.storage_context,
                 embed_model=Settings.embed_model,
                 show_progress=True,
