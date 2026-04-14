@@ -31,7 +31,7 @@ class DocumentLoader:
     def __init__(self) -> None:
         """Initialize the document loader."""
         self.supported_extensions = {
-            ".pdf",
+            ".md",
         }
 
     def get_document_files(self, directory_path: str) -> list[Path]:

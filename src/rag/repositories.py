@@ -9,11 +9,14 @@ import traceback
 from contextlib import suppress
 
 from llama_index.core import (
+    PromptTemplate,
     Settings,
     StorageContext,
     VectorStoreIndex,
 )
-from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.node_parser import MarkdownNodeParser, SentenceSplitter
+from llama_index.core.response_synthesizers import get_response_synthesizer
+from llama_index.core.schema import Document
 from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.llms.ollama import Ollama
 from llama_index.vector_stores.postgres import PGVectorStore
@@ -123,32 +126,78 @@ class RAGRepository:
     def index_documents(self, documents: list) -> bool:
         """Index documents into the vector store.
 
-        Optimized for small document collections (single document with ~17 pages).
-        Uses smaller chunk sizes and reduced overlap for better granularity.
+        Uses MarkdownNodeParser to respect document structure (headers),
+        then SentenceSplitter for further chunking of large sections.
         """
         try:
             logger.info("Creating index from documents...")
             logger.info(f"Number of documents to index: {len(documents)}")
 
-            text_splitter = SentenceSplitter(
-                chunk_size=256,
-                chunk_overlap=20,
-                separator=".\n",
-                paragraph_separator="\n\n\n",
+            # Sanitize document text to remove NUL characters that PostgreSQL cannot handle
+            sanitized_documents = []
+            for doc in documents:
+                if hasattr(doc, 'text') and doc.text:
+                    # Remove NUL bytes (0x00) from the text
+                    sanitized_text = doc.text.replace('\x00', '')
+                    # Create a new document with sanitized text
+                    sanitized_doc = Document(
+                        text=sanitized_text,
+                        metadata=doc.metadata if hasattr(doc, 'metadata') else {},
+                        id_=doc.id_ if hasattr(doc, 'id_') else None,
+                    )
+                    sanitized_documents.append(sanitized_doc)
+                else:
+                    sanitized_documents.append(doc)
+
+            logger.info(f"Sanitized {len(sanitized_documents)} documents")
+
+            # Step 1: Parse markdown by headers to respect document structure
+            markdown_parser = MarkdownNodeParser(
+                include_metadata=True,
+                include_prev_next_rel=True
             )
 
-            Settings.text_splitter = text_splitter
+            # Step 2: Setup text splitter for large sections
+            text_splitter = SentenceSplitter(
+                chunk_size=1000,
+                chunk_overlap=200,
+                separator=" "
+            )
+
+            logger.info("Parsing documents with MarkdownNodeParser...")
+            initial_nodes = markdown_parser.get_nodes_from_documents(sanitized_documents)
+            logger.info(f"Created {len(initial_nodes)} initial nodes from markdown structure")
+
+            # Step 3: Further chunk large nodes
+            final_nodes = []
+            for node in initial_nodes:
+                if len(node.text) > 1000:
+                    # Convert node back to document for splitting
+                    temp_doc = Document(
+                        text=node.text,
+                        metadata=node.metadata,
+                        id_=node.id_
+                    )
+                    sub_nodes = text_splitter.get_nodes_from_documents([temp_doc])
+                    # Preserve original metadata in sub-nodes
+                    for sub_node in sub_nodes:
+                        sub_node.metadata.update(node.metadata)
+                    final_nodes.extend(sub_nodes)
+                else:
+                    final_nodes.append(node)
+
+            logger.info(f"Final node count after chunking: {len(final_nodes)}")
 
             self.storage_context = StorageContext.from_defaults(
                 vector_store=self.vector_store
             )
 
-            self.index = VectorStoreIndex.from_documents(
-                documents,
+            # Create index from nodes instead of documents
+            self.index = VectorStoreIndex(
+                nodes=final_nodes,
                 storage_context=self.storage_context,
                 embed_model=Settings.embed_model,
-                show_progress=True,
-                transformations=[text_splitter],
+                show_progress=True
             )
 
             if self.index:
@@ -209,9 +258,29 @@ class RAGRepository:
 
             optimized_top_k = min(query_request.top_k * 2, 15)
 
+            # Custom prompt template for customer service/call center style responses
+            customer_service_prompt_tmpl = (
+                "Context information is below.\n"
+                "---------------------\n"
+                "{context_str}\n"
+                "---------------------\n"
+                "As a professional customer service representative, please provide a helpful, "
+                "friendly, and short answer to the customer's question based on the context information provided. Explain only if required.\n\n"
+                "Customer's Question: {query_str}\n\n"
+                "Your Response: "
+            )
+            customer_service_prompt = PromptTemplate(customer_service_prompt_tmpl)
+
+            # Create custom response synthesizer with tree_summarize mode
+            response_synthesizer = get_response_synthesizer(
+                response_mode="tree_summarize",
+                summary_template=customer_service_prompt,
+                verbose=False
+            )
+
             query_engine = self.index.as_query_engine(
                 similarity_top_k=optimized_top_k,
-                response_mode="tree_summarize",
+                response_synthesizer=response_synthesizer,
                 similarity_cutoff=0.6,
             )
             response = query_engine.query(query_request.query)
