@@ -63,6 +63,7 @@ app.add_middleware(
         "http://localhost:8023",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:8023",
+        "https://aerosportsscb.share.zrok.io",
     ],
     allow_credentials=True,
     allow_methods=["*"],

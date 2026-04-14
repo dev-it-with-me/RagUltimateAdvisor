@@ -12,6 +12,7 @@ dependencies = [
     "llama-index-llms-ollama>=0.7.1",
     "llama-index-vector-stores-postgres>=0.6.5",
     "ollama>=0.5.3",
+    "openpyxl>=3.1.5",
     "pgvector>=0.4.1",
     "psycopg>=3.2.9",
     "pydantic>=2.11.7",

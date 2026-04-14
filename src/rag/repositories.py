@@ -9,11 +9,13 @@ import traceback
 from contextlib import suppress
 
 from llama_index.core import (
+    PromptTemplate,
     Settings,
     StorageContext,
     VectorStoreIndex,
 )
 from llama_index.core.node_parser import MarkdownNodeParser, SentenceSplitter
+from llama_index.core.response_synthesizers import get_response_synthesizer
 from llama_index.core.schema import Document
 from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.llms.ollama import Ollama
@@ -256,11 +258,29 @@ class RAGRepository:
 
             optimized_top_k = min(query_request.top_k * 2, 15)
 
+            # Custom prompt template for customer service/call center style responses
+            customer_service_prompt_tmpl = (
+                "Context information is below.\n"
+                "---------------------\n"
+                "{context_str}\n"
+                "---------------------\n"
+                "As a professional customer service representative, please provide a helpful, "
+                "friendly, and short answer to the customer's question based on the context information provided. Explain only if required.\n\n"
+                "Customer's Question: {query_str}\n\n"
+                "Your Response: "
+            )
+            customer_service_prompt = PromptTemplate(customer_service_prompt_tmpl)
+
+            # Create custom response synthesizer with tree_summarize mode
+            response_synthesizer = get_response_synthesizer(
+                response_mode="tree_summarize",
+                summary_template=customer_service_prompt,
+                verbose=False
+            )
+
             query_engine = self.index.as_query_engine(
                 similarity_top_k=optimized_top_k,
-                # TODO: Manage this
-                response_mode="tree_summarize",
-                # response_mode="accumulate",
+                response_synthesizer=response_synthesizer,
                 similarity_cutoff=0.6,
             )
             response = query_engine.query(query_request.query)

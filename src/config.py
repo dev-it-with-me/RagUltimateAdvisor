@@ -36,7 +36,7 @@ class Settings(BaseSettings):
         default="embeddinggemma", description="Name of the embedding model to use"
     )
 
-    DATA_FOLDER: Path = BASE_DIR / "data"
+    DATA_FOLDER: Path = BASE_DIR / "parser/output"
 
     @property
     def database_url(self) -> str:
